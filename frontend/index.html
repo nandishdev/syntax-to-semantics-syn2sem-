@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Syntax-to-Semantics Gap Prediction and Code Translation</title>
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="styles.css?v=2.2">
+    <!-- jsPDF for PDF Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body class="dark-mode"> <!-- Default theme is dark -->
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">Translation Completed Successfully</div>
+
+    <!-- History Panel Overlay -->
+    <div id="history-overlay" class="history-overlay hidden">
+        <div class="history-panel">
+            <div class="history-header">
+                <h3><i class="fa-solid fa-clock-rotate-left"></i> Translation History</h3>
+                <button id="btn-close-history" class="icon-btn"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="history-list" class="history-list">
+                <!-- History items will be injected here -->
+                <p style="text-align: center; color: #888; margin-top: 20px;">No translation history yet.</p>
+            </div>
+            <div class="history-footer">
+                <button id="btn-clear-history" class="btn btn-outline" style="width: 100%;"><i class="fa-solid fa-trash"></i> Clear History</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Background Glyph Field -->
+    <div class="glyph-field">
+        <span class="glyph" style="left: 3%; font-size: 24px; animation-duration: 8s; animation-delay: -1s;">{ }</span>
+        <span class="glyph" style="left: 12%; font-size: 32px; animation-duration: 11s; animation-delay: -3s;">[ ]</span>
+        <span class="glyph" style="left: 22%; font-size: 20px; animation-duration: 7s; animation-delay: -5s;">( )</span>
+        <span class="glyph" style="left: 32%; font-size: 28px; animation-duration: 9s; animation-delay: -2s;">&lt; /&gt;</span>
+        <span class="glyph" style="left: 42%; font-size: 22px; animation-duration: 10s; animation-delay: -6s;">{ }</span>
+        <span class="glyph" style="left: 52%; font-size: 36px; animation-duration: 12s; animation-delay: -4s;">[ ]</span>
+        <span class="glyph" style="left: 62%; font-size: 24px; animation-duration: 8s; animation-delay: -7s;">( )</span>
+        <span class="glyph" style="left: 72%; font-size: 30px; animation-duration: 10s; animation-delay: -1s;">&lt; &gt;</span>
+        <span class="glyph" style="left: 82%; font-size: 26px; animation-duration: 9s; animation-delay: -5s;">{ }</span>
+        <span class="glyph" style="left: 92%; font-size: 20px; animation-duration: 7s; animation-delay: -3s;">[ ]</span>
+        
+        <span class="glyph" style="left: 7%; font-size: 28px; animation-duration: 9s; animation-delay: -4s;">=&gt;</span>
+        <span class="glyph" style="left: 18%; font-size: 22px; animation-duration: 10s; animation-delay: -8s;">function()</span>
+        <span class="glyph" style="left: 28%; font-size: 25px; animation-duration: 8s; animation-delay: -2s;">if (x) { }</span>
+        <span class="glyph" style="left: 38%; font-size: 20px; animation-duration: 11s; animation-delay: -5s;">const [val]</span>
+        <span class="glyph" style="left: 48%; font-size: 30px; animation-duration: 10s; animation-delay: -3s;">class {}</span>
+        <span class="glyph" style="left: 58%; font-size: 22px; animation-duration: 7s; animation-delay: -6s;">import { }</span>
+        <span class="glyph" style="left: 68%; font-size: 26px; animation-duration: 9s; animation-delay: -1s;">return x;</span>
+        <span class="glyph" style="left: 78%; font-size: 24px; animation-duration: 8s; animation-delay: -7s;">} else {</span>
+        <span class="glyph" style="left: 88%; font-size: 28px; animation-duration: 11s; animation-delay: -4s;">let {a} =</span>
+        <span class="glyph" style="left: 96%; font-size: 18px; animation-duration: 8s; animation-delay: -2s;">(a, b)</span>
+
+        <span class="glyph" style="left: 10%; font-size: 22px; animation-duration: 10s; animation-delay: 0s;">{ ... }</span>
+        <span class="glyph" style="left: 25%; font-size: 26px; animation-duration: 8s; animation-delay: 1s;">[ ... ]</span>
+        <span class="glyph" style="left: 40%; font-size: 24px; animation-duration: 9s; animation-delay: 2s;">&lt;code&gt;</span>
+        <span class="glyph" style="left: 55%; font-size: 32px; animation-duration: 11s; animation-delay: 1.5s;">{ code }</span>
+        <span class="glyph" style="left: 70%; font-size: 20px; animation-duration: 7s; animation-delay: 0.5s;">(fn)</span>
+        <span class="glyph" style="left: 85%; font-size: 28px; animation-duration: 10s; animation-delay: 2.5s;">&lt;div&gt;</span>
+    </div>
+
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="logo">
+            <span class="logo-icon"><i class="fa-solid fa-code"></i></span>
+            <span class="logo-text">Syn2Sem</span>
+        </div>
+        <ul class="nav-links">
+            <li><a href="#home">Home</a></li>
+            <li><a href="#features">Features</a></li>
+            <li><a href="#demo">Live Demo</a></li>
+            <li><a href="#workflow">Workflow</a></li>
+            <li><a href="#about">About</a></li>
+            <li><a href="#team">Team</a></li>
+        </ul>
+        <div class="nav-actions">
+            <button id="btn-history" class="icon-btn" title="Translation History"><i class="fa-solid fa-clock-rotate-left"></i></button>
+            <button id="theme-toggle" class="icon-btn"><i class="fa-solid fa-sun"></i></button>
+            <div class="hamburger">
+                <i class="fa-solid fa-bars"></i>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Home Section -->
+    <header id="home" class="hero active-section">
+        <div class="hero-bg"></div>
+        <div class="hero-content">
+            <h1 class="project-title">Syntax-to-Semantics Gap Prediction<br>& Code Translation</h1>
+            <p class="hero-desc">
+                An AI-powered system that predicts syntax-to-semantics gaps in source code and translates code between multiple programming languages while preserving functionality.
+            </p>
+            <div class="typing-container">
+                <span id="typing-text"></span><span class="cursor">|</span>
+            </div>
+            <div class="hero-buttons" style="display: flex; gap: 20px; justify-content: center; flex-wrap: wrap;">
+                <a href="#demo" class="btn btn-gradient btn-large">Start Translating <i class="fa-solid fa-arrow-right"></i></a>
+                <a href="#workflow" class="btn btn-outline btn-large" style="color: var(--text-color); border-color: var(--text-color);">See How it Works <i class="fa-solid fa-gears"></i></a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Features Section -->
+    <section id="features" class="section">
+        <div class="section-header">
+            <h2>Core Features</h2>
+            <div class="underline"></div>
+        </div>
+        <div class="features-grid">
+            <div class="feature-card glass-card">
+                <div class="feature-icon"><i class="fa-solid fa-language"></i></div>
+                <h3>Multi-language Code Translation</h3>
+                <p>Seamlessly convert code across popular languages while retaining identical logic.</p>
+            </div>
+            <div class="feature-card glass-card">
+                <div class="feature-icon"><i class="fa-solid fa-bug"></i></div>
+                <h3>Syntax Error Detection</h3>
+                <p>Instantly catch and highlight syntax issues before translation even begins.</p>
+            </div>
+            <div class="feature-card glass-card">
+                <div class="feature-icon"><i class="fa-solid fa-brain"></i></div>
+                <h3>Semantic Gap Prediction</h3>
+                <p>Advanced AI models predict logic gaps that could break functionality during translation.</p>
+            </div>
+            <div class="feature-card glass-card">
+                <div class="feature-icon"><i class="fa-solid fa-lightbulb"></i></div>
+                <h3>AI Suggestions</h3>
+                <p>Receive intelligent recommendations to optimize and refactor your codebase.</p>
+            </div>
+            <div class="feature-card glass-card">
+                <div class="feature-icon"><i class="fa-solid fa-chart-line"></i></div>
+                <h3>Code Quality Analysis</h3>
+                <p>Analyze complexity, maintainability, and structural integrity of the input code.</p>
+            </div>
+            <div class="feature-card glass-card">
+                <div class="feature-icon"><i class="fa-solid fa-download"></i></div>
+                <h3>Download Translated Code</h3>
+                <p>Export your translated output directly to your local machine with a single click.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Live Demo Section -->
+    <section id="demo" class="section bg-alt">
+        <div class="section-header">
+            <h2>Live Demo</h2>
+            <div class="underline"></div>
+        </div>
+        <div class="demo-container glass-card">
+            
+            <div class="editor-layout">
+                <!-- Left Panel: Source -->
+                <div class="panel source-panel">
+                    <div class="panel-header">
+                        <label for="source-lang">Source Language:</label>
+                        <select id="source-lang" class="lang-select">
+                            <option value="java">Java</option>
+                            <option value="c">C</option>
+                            <option value="cpp">C++</option>
+                            <option value="python">Python</option>
+                            <option value="javascript">JavaScript</option>
+                        </select>
+                        <div class="theme-toggle-editor icon-btn"><i class="fa-solid fa-palette"></i></div>
+                    </div>
+                    <div class="code-area-wrapper">
+                        <div id="source-editor" class="monaco-container"></div>
+                    </div>
+                    
+                    <!-- Console Output -->
+                    <div class="console-wrapper hidden" id="console-output-container">
+                        <div class="console-header">
+                            <span><i class="fa-solid fa-terminal"></i> Terminal Output</span>
+                            <button id="btn-close-console" class="icon-btn"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
+                        <pre id="console-output-content" class="console-content"></pre>
+                    </div>
+
+                    <div class="panel-actions" style="justify-content: space-between;">
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <button id="btn-analyze" class="btn btn-outline">Analyze Code</button>
+                            <button id="btn-clear" class="btn btn-danger">Clear</button>
+                        </div>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <button id="btn-translate" class="btn btn-gradient"><i class="fa-solid fa-language"></i> Translate</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Panel: Target -->
+                <div class="panel target-panel">
+                    <div class="panel-header">
+                        <label for="target-lang">Target Language:</label>
+                        <select id="target-lang" class="lang-select">
+                            <option value="python">Python</option>
+                            <option value="java">Java</option>
+                            <option value="c">C</option>
+                            <option value="cpp">C++</option>
+                            <option value="javascript">JavaScript</option>
+                        </select>
+                        
+                        <div class="target-actions">
+                            
+                            <!-- Run Group -->
+                            <div class="action-group" style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
+                                <span style="font-size: 0.65rem; color: var(--success-color); text-shadow: 0 0 8px rgba(16,185,129,0.4); text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">Run</span>
+                                <button id="btn-run" class="icon-btn text-green" title="Run Code" style="background: rgba(16, 185, 129, 0.15); border-radius: 6px; padding: 6px 12px;"><i class="fa-solid fa-play"></i></button>
+                            </div>
+                            
+                            <!-- Analysis Group -->
+                            <div class="action-group desktop-only" style="display: flex; flex-direction: column; align-items: center; gap: 2px; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 15px;">
+                                <span style="font-size: 0.65rem; color: #eab308; text-shadow: 0 0 8px rgba(234,179,8,0.4); text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">Gap</span>
+                                <button id="btn-toggle-diff" class="icon-btn" title="Toggle Semantic Diff View"><i class="fa-solid fa-code-compare"></i></button>
+                            </div>
+
+                            <!-- IDEs Group -->
+                            <div class="action-group desktop-only" style="display: flex; flex-direction: column; align-items: center; gap: 2px; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 15px;">
+                                <span style="font-size: 0.65rem; color: var(--primary-color); text-shadow: 0 0 8px rgba(6,182,212,0.4); text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">IDEs</span>
+                                <div style="display: flex; gap: 5px;">
+                                    <button id="btn-vscode" class="icon-btn" title="Open in VS Code">
+                                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style="vertical-align: middle;"><path d="M23.15 2.587L18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"/></svg>
+                                    </button>
+                                    <button id="btn-antigravity" class="icon-btn" title="Open in Antigravity IDE">
+                                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style="vertical-align: middle;"><path d="M12 1L2 21h4.5l1.5-3h8l1.5 3H22L12 1zm-2.5 13L12 6l2.5 8h-5z"/><circle cx="12" cy="23" r="1.5" /></svg>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Export Group -->
+                            <div class="action-group" style="display: flex; flex-direction: column; align-items: center; gap: 2px; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 15px;">
+                                <span style="font-size: 0.65rem; color: var(--accent-color); text-shadow: 0 0 8px rgba(217,70,239,0.4); text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">Export</span>
+                                <div style="display: flex; gap: 5px;">
+                                    <button id="btn-copy" class="icon-btn" title="Copy to Clipboard"><i class="fa-solid fa-copy"></i></button>
+                                    <button id="btn-download" class="icon-btn desktop-only" title="Export to Notepad (.txt)"><i class="fa-solid fa-file-lines"></i></button>
+                                    <button id="btn-download-pdf" class="icon-btn" title="Export to PDF"><i class="fa-solid fa-file-pdf"></i></button>
+                                </div>
+                            </div>
+
+                            <!-- Share Group (Mobile Only) -->
+                            <div class="action-group mobile-only" style="display: flex; flex-direction: column; align-items: center; gap: 2px; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 15px;">
+                                <span style="font-size: 0.65rem; color: var(--primary-color); text-shadow: 0 0 8px rgba(6,182,212,0.4); text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">Share</span>
+                                <button id="btn-share" class="icon-btn" title="Share Code"><i class="fa-solid fa-share-nodes"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="code-area-wrapper output-wrapper">
+                        <!-- Loading Overlay -->
+                        <div id="loading-overlay" class="overlay hidden">
+                            <div class="spinner"></div>
+                            <p id="loading-text">Analyzing...</p>
+                        </div>
+                        <div id="target-editor" class="monaco-container"></div>
+                        <div id="diff-header" class="hidden" style="padding: 10px 15px; font-weight: bold; background: rgba(0,0,0,0.2); border-bottom: 1px solid rgba(255,255,255,0.1); color: var(--accent-color); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;"><i class="fa-solid fa-code-compare"></i> Gap Analysis</div>
+                        <div id="diff-editor" class="monaco-container hidden"></div>
+                    </div>
+                    
+            </div>
+        </div>
+        
+        <!-- Dashboard Results (HUD) Full Width -->
+        <div class="hud-dashboard glass-card hidden" id="results-dashboard" style="margin: 40px 5%; padding: 30px; border-radius: 15px;">
+            <div class="hud-header">
+                <i class="fa-solid fa-chart-line"></i> Syn2Sem Analysis
+            </div>
+            
+            <!-- Top Row: Metrics -->
+            <div class="hud-grid-top">
+                <div class="hud-widget glow-cyan">
+                    <i class="fa-solid fa-bullseye hud-bg-icon"></i>
+                    <span class="hud-label">Similarity Score</span>
+                    <span class="hud-value text-cyan" id="res-score">-</span>
+                </div>
+                <div class="hud-widget glow-purple">
+                    <i class="fa-solid fa-stopwatch hud-bg-icon"></i>
+                    <span class="hud-label">Time Complexity</span>
+                    <span class="hud-value text-purple" id="res-time-complexity">-</span>
+                </div>
+                <div class="hud-widget glow-purple">
+                    <i class="fa-solid fa-memory hud-bg-icon"></i>
+                    <span class="hud-label">Space Complexity</span>
+                    <span class="hud-value text-purple" id="res-space-complexity">-</span>
+                </div>
+            </div>
+            
+            <!-- Middle Row: Status -->
+            <div class="hud-grid-middle">
+                <div class="hud-widget glow-green" id="hud-syntax-widget">
+                    <i class="fa-solid fa-bug hud-bg-icon"></i>
+                    <span class="hud-label">Syntax Errors</span>
+                    <span class="result-value text-green" id="res-syntax">-</span>
+                </div>
+                <div class="hud-widget glow-green" id="hud-status-widget">
+                    <i class="fa-solid fa-shield-halved hud-bg-icon"></i>
+                    <span class="hud-label">Translation Status</span>
+                    <span class="hud-value text-green" id="res-gap">-</span>
+                </div>
+                <div class="hud-widget glow-blue">
+                    <i class="fa-solid fa-check-double hud-bg-icon"></i>
+                    <span class="hud-label">Translation Confidence</span>
+                    <span class="hud-value text-blue" id="res-confidence">-</span>
+                </div>
+            </div>
+
+            <!-- Bottom Row: Analysis -->
+            <div class="hud-grid-bottom">
+                <div class="hud-widget hud-large glow-blue">
+                    <i class="fa-solid fa-robot hud-bg-icon"></i>
+                    <span class="hud-label">AI Suggestions</span>
+                    <ul class="suggestion-list" id="res-suggestions">
+                        <li>-</li>
+                    </ul>
+                </div>
+                <div class="hud-widget hud-large glow-cyan">
+                    <i class="fa-solid fa-network-wired hud-bg-icon"></i>
+                    <span class="hud-label">Semantic Logic Breakdown</span>
+                    <ul class="suggestion-list" id="res-logic-breakdown">
+                        <li>-</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Workflow Section -->
+    <section id="workflow" class="section">
+        <div class="section-header">
+            <h2>Workflow</h2>
+            <div class="underline"></div>
+        </div>
+        <div class="workflow-container">
+            <div class="flow-step slide-up">
+                <div class="flow-icon"><i class="fa-solid fa-file-code"></i></div>
+                <h4>1. User Code</h4>
+                <p class="flow-desc">The user types their code and chooses the languages.</p>
+            </div>
+            <div class="flow-arrow slide-up"><i class="fa-solid fa-arrow-right"></i><i class="fa-solid fa-arrow-down mobile-arrow"></i></div>
+            
+            <div class="flow-step slide-up">
+                <div class="flow-icon"><i class="fa-solid fa-magnifying-glass-chart"></i></div>
+                <h4>2. Syntax Analysis</h4>
+                <p class="flow-desc">The system checks the code to make sure there are no typing errors.</p>
+            </div>
+            <div class="flow-arrow slide-up"><i class="fa-solid fa-arrow-right"></i><i class="fa-solid fa-arrow-down mobile-arrow"></i></div>
+            
+            <div class="flow-step slide-up">
+                <div class="flow-icon"><i class="fa-solid fa-brain"></i></div>
+                <h4>3. Semantic Gap Prediction</h4>
+                <p class="flow-desc">The system looks for hidden logic risks before translating.</p>
+            </div>
+            <div class="flow-arrow slide-up"><i class="fa-solid fa-arrow-right"></i><i class="fa-solid fa-arrow-down mobile-arrow"></i></div>
+            
+            <div class="flow-step slide-up">
+                <div class="flow-icon"><i class="fa-solid fa-microchip"></i></div>
+                <h4>4. Translation Engine</h4>
+                <p class="flow-desc">The engine safely translates the code into the new language.</p>
+            </div>
+            <div class="flow-arrow slide-up"><i class="fa-solid fa-arrow-right"></i><i class="fa-solid fa-arrow-down mobile-arrow"></i></div>
+            
+            <div class="flow-step slide-up">
+                <div class="flow-icon"><i class="fa-solid fa-laptop-code"></i></div>
+                <h4>5. Optimized Output Code</h4>
+                <p class="flow-desc">The final, working code is displayed with a safety score.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Dashboard Section -->
+    <section id="dashboard" class="section bg-alt">
+        <div class="section-header">
+            <h2>Platform Statistics</h2>
+            <div class="underline"></div>
+        </div>
+        <div class="stats-grid">
+            <div class="stat-card glass-card">
+                <div class="stat-icon"><i class="fa-solid fa-code"></i></div>
+                <div class="stat-number" data-target="6">0</div>
+                <div class="stat-label">Supported Languages</div>
+            </div>
+            <div class="stat-card glass-card">
+                <div class="stat-icon"><i class="fa-solid fa-bullseye"></i></div>
+                <div class="stat-number" data-target="95">0</div><span class="stat-suffix">%</span>
+                <div class="stat-label">Translation Accuracy</div>
+            </div>
+            <div class="stat-card glass-card">
+                <div class="stat-icon"><i class="fa-solid fa-bolt"></i></div>
+                <div class="stat-number float" data-target="1.3">0</div><span class="stat-suffix">sec</span>
+                <div class="stat-label">Avg. Processing Time</div>
+            </div>
+            <div class="stat-card glass-card">
+                <div class="stat-icon"><i class="fa-solid fa-check-double"></i></div>
+                <div class="stat-number" data-target="94">0</div><span class="stat-suffix">%</span>
+                <div class="stat-label">Semantic Prediction Accuracy</div>
+            </div>
+            <div class="stat-card glass-card">
+                <div class="stat-icon"><i class="fa-solid fa-folder-open"></i></div>
+                <div class="stat-number" data-target="500">0</div><span class="stat-suffix">+</span>
+                <div class="stat-label">Projects Tested</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- About Project -->
+    <section id="about" class="section">
+        <div class="section-header">
+            <h2>About Project</h2>
+            <div class="underline"></div>
+        </div>
+        <div class="about-content glass-card">
+            <p>
+                This project helps you translate code between different programming languages without losing its original meaning or functionality. Before using AI to write the new code, it actively looks for common translation mistakes. Once the AI finishes translating, our system double-checks the new code for errors to make sure it actually works, rather than just trusting the AI's guess.
+            </p>
+        </div>
+    </section>
+
+    <!-- Team Section -->
+    <section id="team" class="section bg-alt">
+        <div class="section-header">
+            <h2>Our Team</h2>
+            <div class="underline"></div>
+        </div>
+        <div class="team-container">
+            <div class="team-group">
+                <h3 class="group-title">Project Guides</h3>
+                <div class="team-members-grid" style="display: flex; justify-content: center; gap: 30px; flex-wrap: wrap;">
+                    <div class="team-card glass-card">
+                        <div class="avatar"><img src="https://ui-avatars.com/api/?name=Pratibha+Pujari&background=0D8ABC&color=fff" alt="Prof. Pratibha Pujari" /></div>
+                        <h4>Prof. Pratibha Pujari</h4>
+                        <div class="usn-badge">Guide</div>
+                        <p style="margin-top: 15px; color: var(--text-muted); font-size: 0.95rem;">Assistant Professor</p>
+                    </div>
+                    <div class="team-card glass-card">
+                        <div class="avatar"><img src="https://ui-avatars.com/api/?name=Vrinda+Shetty&background=0D8ABC&color=fff" alt="Dr. Vrinda Shetty" /></div>
+                        <h4>Dr. Vrinda Shetty</h4>
+                        <div class="usn-badge">Co-Guide</div>
+                        <p style="margin-top: 15px; color: var(--text-muted); font-size: 0.95rem;">Professor & Dean-Academics</p>
+                    </div>
+                </div>
+            </div>
+            <div class="team-group">
+                <h3 class="group-title">Team Members</h3>
+                <div class="team-members-grid">
+                    <div class="team-card glass-card">
+                        <div class="avatar"><img src="https://ui-avatars.com/api/?name=PRAVEEN+HS&background=0D8ABC&color=fff" alt="PRAVEEN HS" /></div>
+                        <h4>PRAVEEN HS</h4>
+                        <div class="usn-badge">1VA23IS072</div>
+                        <div class="team-social">
+                            <a href="https://mail.google.com/mail/?view=cm&fs=1&to=Praveenhs.23is@saividya.ac.in" target="_blank" rel="noopener noreferrer" class="team-social-icon email-link" title="Email"><i class="fa-solid fa-envelope"></i></a>
+                            <a href="https://www.linkedin.com/in/praveen-h-s-799323306" target="_blank" rel="noopener noreferrer" class="team-social-icon linkedin-link" title="LinkedIn"><i class="fa-brands fa-linkedin"></i></a>
+                        </div>
+                    </div>
+                    <div class="team-card glass-card">
+                        <div class="avatar"><img src="https://ui-avatars.com/api/?name=ULLAS+JAIN+MS&background=0D8ABC&color=fff" alt="ULLAS JAIN MS" /></div>
+                        <h4>ULLAS JAIN MS</h4>
+                        <div class="usn-badge">1VA23IS113</div>
+                        <div class="team-social">
+                            <a href="https://mail.google.com/mail/?view=cm&fs=1&to=ullasjainms.23is@saividya.ac.in" target="_blank" rel="noopener noreferrer" class="team-social-icon email-link" title="Email"><i class="fa-solid fa-envelope"></i></a>
+                            <a href="https://www.linkedin.com/in/ullas-jain-ms" target="_blank" rel="noopener noreferrer" class="team-social-icon linkedin-link" title="LinkedIn"><i class="fa-brands fa-linkedin"></i></a>
+                        </div>
+                    </div>
+                    <div class="team-card glass-card">
+                        <div class="avatar"><img src="https://ui-avatars.com/api/?name=VIJAY+KUMAR+A&background=0D8ABC&color=fff" alt="VIJAY KUMAR A" /></div>
+                        <h4>VIJAY KUMAR A</h4>
+                        <div class="usn-badge">1VA23IS118</div>
+                        <div class="team-social">
+                            <a href="https://mail.google.com/mail/?view=cm&fs=1&to=vijaykumara.23is@saividya.ac.in" target="_blank" rel="noopener noreferrer" class="team-social-icon email-link" title="Email"><i class="fa-solid fa-envelope"></i></a>
+                            <a href="https://www.linkedin.com/in/vijay-kumar-a-423914324" target="_blank" rel="noopener noreferrer" class="team-social-icon linkedin-link" title="LinkedIn"><i class="fa-brands fa-linkedin"></i></a>
+                        </div>
+                    </div>
+                    <div class="team-card glass-card">
+                        <div class="avatar"><img src="https://ui-avatars.com/api/?name=NANDISH+K&background=0D8ABC&color=fff" alt="NANDISH K" /></div>
+                        <h4>NANDISH K</h4>
+                        <div class="usn-badge">1VA24IS400</div>
+                        <div class="team-social">
+                            <a href="https://mail.google.com/mail/?view=cm&fs=1&to=nandishr.24is@saividya.ac.in" target="_blank" rel="noopener noreferrer" class="team-social-icon email-link" title="Email"><i class="fa-solid fa-envelope"></i></a>
+                            <a href="https://www.linkedin.com/in/nandish-k-632b93288?utm_source=share_via&utm_content=profile&utm_medium=member_android" target="_blank" rel="noopener noreferrer" class="team-social-icon linkedin-link" title="LinkedIn"><i class="fa-brands fa-linkedin"></i></a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="project-status">
+            <span class="status-badge">Project Status: Phase 1</span>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer glass-card">
+        <!-- Removed footer logo and social links per user request -->
+        <div class="footer-bottom">
+            <p>&copy; <span id="year"></span> Syn2Sem Project. All Rights Reserved.</p>
+        </div>
+    </footer>
+
+    <!-- Floating Back Button -->
+    <a href="#home" id="floating-back-btn" class="floating-back-btn">
+        <i class="fa-solid fa-arrow-left"></i> Home
+    </a>
+
+    <!-- jsPDF for PDF export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js"></script>
+    <script src="script.js?v=3.9"></script>
+</body>
+</html>

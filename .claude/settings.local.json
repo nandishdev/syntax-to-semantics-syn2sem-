@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(foreach \\($f in @\\('index.html','script.js','server.js','styles.css','scratch.js'\\)\\) { $p = \"D:\\\\STOS\\\\frontend\\\\$f\"; $n = \\(Get-Content $p | Measure-Object -Line\\).Lines; \"{0,-20} {1,6} lines\" -f $f, $n })"
+    ]
+  }
+}
