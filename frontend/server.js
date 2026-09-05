@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 const os = require('os');
+const irCompiler = require('./compiler');
 
 const PORT = process.env.PORT || 3000;
 
@@ -251,7 +252,15 @@ function syn2SemTranslateCore(code, sourceLang, targetLang) {
     if (!code || !code.trim()) return '';
     if (sourceLang === targetLang) return code;
 
-
+    try {
+        const irOut = irCompiler.translate(code, sourceLang, targetLang);
+        if (irOut && String(irOut).trim()) {
+            console.log(`[IR Compiler] ${sourceLang} -> ${targetLang}`);
+            return irOut;
+        }
+    } catch (err) {
+        console.error(`[IR Compiler] ${sourceLang} -> ${targetLang} failed, using legacy engine:`, err.message);
+    }
 
     // Normalize Python source to remove constructs that break cross-language fallback translation
     function normalizePythonForTranslation(pyCode) {
@@ -1982,34 +1991,42 @@ const server = http.createServer((request, response) => {
 
                 // 2. Translate
                 let translatedCode = syn2SemTranslateCore(body, sourceLang, targetLang);
-                translatedCode = sanitizeTargetSyntax(translatedCode, targetLang);
 
-                // 3. Target AST Verification
-                let targetVerified = true;
-                let targetSyntaxErrors = 0;
-                if (Parser && langParsers[targetLang]) {
-                    try {
-                        const tgtParser = new Parser();
-                        tgtParser.setLanguage(langParsers[targetLang]);
-                        const tgtTree = tgtParser.parse(translatedCode);
-                        function checkTgt(node) {
-                            if (!node) return;
-                            if (node.isMissing || node.type === 'ERROR') targetSyntaxErrors++;
-                            for (let i = 0; i < node.childCount; i++) checkTgt(node.child(i));
-                        }
-                        checkTgt(tgtTree.rootNode);
-                        if (targetSyntaxErrors > 0) targetVerified = false;
-                    } catch (e) { targetVerified = false; }
+                function countTgtErrors(code) {
+                    if (!Parser || !langParsers[targetLang]) return 0;
+                    const tgtParser = new Parser();
+                    tgtParser.setLanguage(langParsers[targetLang]);
+                    const tgtTree = tgtParser.parse(code);
+                    let n = 0;
+                    function checkTgt(node) {
+                        if (!node) return;
+                        if (node.isMissing || node.type === 'ERROR') n++;
+                        for (let i = 0; i < node.childCount; i++) checkTgt(node.child(i));
+                    }
+                    checkTgt(tgtTree.rootNode);
+                    return n;
                 }
 
-                // 4. Metrics
-                const similarityScore = targetVerified ? "96%" : "88%";
-                const confidence = targetVerified ? "98%" : "85%";
-                const gapStatus = targetVerified ? "Low Risk - Preserved Semantics" : "Medium Risk - Check Syntax";
+                let targetSyntaxErrors = countTgtErrors(translatedCode);
+                if (targetSyntaxErrors > 0) {
+                    const sanitized = sanitizeTargetSyntax(translatedCode, targetLang);
+                    const after = countTgtErrors(sanitized);
+                    if (after <= targetSyntaxErrors) {
+                        translatedCode = sanitized;
+                        targetSyntaxErrors = after;
+                    }
+                }
+
+                const targetVerified = targetSyntaxErrors === 0;
+                const similarityScore = targetVerified ? "syntax verified" : "syntax issues";
+                const confidence = targetVerified ? "IR emit" : "needs review";
+                const gapStatus = targetVerified
+                    ? "IR compiler (Python, JS, Java, C, C++) — student subset: loops, if/else, functions, print"
+                    : "Medium Risk - Check Syntax";
 
                 response.end(JSON.stringify({
                     error: false, translatedCode, similarityScore, confidence, gapStatus,
-                    targetVerified, engineName: "Syn2Sem AST Hybrid Engine v1.0 (Fallback)"
+                    targetVerified, engineName: "Syn2Sem IR Compiler (5-language)"
                 }));
             }
 
@@ -2042,10 +2059,8 @@ const server = http.createServer((request, response) => {
             for (const tgt of targets) {
                 try {
                     const srcForTarget = (tgt === sourceLang) ? body : syn2SemTranslateCore(body, sourceLang, tgt);
-                    const sanitized = sanitizeTargetSyntax(srcForTarget, tgt);
-                    // attempt to run translated code (or original if same language)
-                    const runRes = await runCodeAndCapture(tgt, sanitized);
-                    results.push({ target: tgt, translatedCode: sanitized, run: runRes });
+                    const runRes = await runCodeAndCapture(tgt, srcForTarget);
+                    results.push({ target: tgt, translatedCode: srcForTarget, run: runRes });
                 } catch (e) {
                     results.push({ target: tgt, error: true, message: e.message || String(e) });
                 }
