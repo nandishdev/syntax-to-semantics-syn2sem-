@@ -120,10 +120,32 @@ function main() {
         }
     }
 
-    const n = rows.length;
+    const pyInput = 'marks = float(input("Enter marks: "))\nprint(marks)\n';
+    const javaFromPy = translate(pyInput, 'python', 'java');
+    if (javaFromPy.includes('float(input') || !javaFromPy.includes('Scanner') || !javaFromPy.includes('readDouble')) {
+        rows.push({ id: 'input:python->java', syntaxOk: false, semantic: 'missing Scanner lowering', ok: false });
+    } else {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'stos_t_'));
+        try {
+            fs.writeFileSync(path.join(dir, 'Demo.java'), javaFromPy);
+            execSync(`javac "${path.join(dir, 'Demo.java')}"`, { encoding: 'utf8', timeout: 15000 });
+            const out = normalizeOut(execSync(`java -cp "${dir}" Demo`, {
+                encoding: 'utf8',
+                timeout: 8000,
+                input: '85\n',
+            }));
+            const ok = /85/.test(out);
+            rows.push({ id: 'input:python->java', syntaxOk: true, semantic: ok ? 'match' : `mismatch:${JSON.stringify(out)}`, ok });
+        } catch (e) {
+            rows.push({ id: 'input:python->java', syntaxOk: false, semantic: 'error:' + String(e.message || e).split('\n')[0].slice(0, 80), ok: false });
+        } finally {
+            try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
+        }
+    }
     const syn = rows.filter((r) => r.syntaxOk).length;
     const sem = rows.filter((r) => r.semantic === 'match').length;
     const full = rows.filter((r) => r.ok).length;
+    const n = rows.length;
     console.log(JSON.stringify({
         n,
         syntaxPct: Math.round((syn / n) * 1000) / 10,

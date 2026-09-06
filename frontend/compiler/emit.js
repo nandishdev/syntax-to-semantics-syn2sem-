@@ -1,4 +1,5 @@
 const { assertNever } = require('./util');
+const { programUsesInput } = require('./lower');
 
 function emitProgram(prog, tgt) {
     const ctx = {
@@ -7,6 +8,7 @@ function emitProgram(prog, tgt) {
         declared: new Set(),
         lines: [],
         fnReturn: new Map(),
+        usesInput: programUsesInput(prog),
     };
     for (const fn of prog.functions || []) {
         ctx.fnReturn.set(fn.name, inferReturnType(fn.body, ctx));
@@ -74,8 +76,15 @@ function inferExprType(expr, ctx) {
             return expr.op === '!' ? 'bool' : inferExprType(expr.expr, ctx);
         case 'call': {
             const n = expr.callee && expr.callee.kind === 'id' ? expr.callee.name : '';
+            if (n === 'float' || n === 'double') return 'double';
+            if (n === 'int') return 'int';
+            if (n === 'str' || n === 'input') return 'string';
             return ctx.fnReturn.get(n) || 'int';
         }
+        case 'input':
+            return expr.type || 'string';
+        case 'cast':
+            return expr.type || inferExprType(expr.expr, ctx);
         case 'list':
             return 'list';
         case 'index':
@@ -167,9 +176,84 @@ function emitExpr(expr, ctx) {
         }
         case 'index':
             return `${emitExpr(expr.obj, ctx)}[${emitExpr(expr.index, ctx)}]`;
+        case 'input':
+            return emitInputExpr(expr, ctx);
+        case 'cast':
+            return emitCastExpr(expr, ctx);
         default:
             return '0';
     }
+}
+
+function emitInputExpr(expr, ctx) {
+    const tgt = ctx.tgt;
+    const prompt = emitExpr(expr.prompt || { kind: 'str', value: '' }, ctx);
+    const ty = expr.type || 'string';
+    if (tgt === 'python') {
+        const inner = `input(${prompt})`;
+        if (ty === 'double') return `float(${inner})`;
+        if (ty === 'int') return `int(${inner})`;
+        if (ty === 'bool') return `bool(${inner})`;
+        return inner;
+    }
+    if (tgt === 'javascript') {
+        if (ty === 'double') return `parseFloat(input(${prompt}))`;
+        if (ty === 'int') return `parseInt(input(${prompt}), 10)`;
+        return `input(${prompt})`;
+    }
+    if (tgt === 'java') {
+        if (ty === 'double') return `readDouble(${prompt})`;
+        if (ty === 'int') return `readInt(${prompt})`;
+        return `readLine(${prompt})`;
+    }
+    if (tgt === 'c') {
+        if (ty === 'double') return `read_double(${prompt})`;
+        if (ty === 'int') return `read_int(${prompt})`;
+        return `read_line(${prompt})`;
+    }
+    if (tgt === 'cpp') {
+        if (ty === 'double') return `read_double(${prompt})`;
+        if (ty === 'int') return `read_int(${prompt})`;
+        return `read_line(${prompt})`;
+    }
+    assertNever(tgt);
+    return '0';
+}
+
+function emitCastExpr(expr, ctx) {
+    const tgt = ctx.tgt;
+    const inner = emitExpr(expr.expr, ctx);
+    const ty = expr.type || 'int';
+    if (tgt === 'python') {
+        if (ty === 'double') return `float(${inner})`;
+        if (ty === 'int') return `int(${inner})`;
+        if (ty === 'string') return `str(${inner})`;
+        return inner;
+    }
+    if (tgt === 'javascript') {
+        if (ty === 'double') return `Number(${inner})`;
+        if (ty === 'int') return `parseInt(${inner}, 10)`;
+        if (ty === 'string') return `String(${inner})`;
+        return inner;
+    }
+    if (tgt === 'java') {
+        if (ty === 'double') return `Double.parseDouble(String.valueOf(${inner}))`;
+        if (ty === 'int') return `((int) ${inner})`;
+        if (ty === 'string') return `String.valueOf(${inner})`;
+        return inner;
+    }
+    if (tgt === 'c') {
+        if (ty === 'double') return `((double) ${inner})`;
+        if (ty === 'int') return `((int) ${inner})`;
+        return inner;
+    }
+    if (tgt === 'cpp') {
+        if (ty === 'double') return `static_cast<double>(${inner})`;
+        if (ty === 'int') return `static_cast<int>(${inner})`;
+        if (ty === 'string') return `std::to_string(${inner})`;
+        return inner;
+    }
+    return inner;
 }
 
 function emitPrint(args, d, ctx) {
@@ -390,6 +474,17 @@ function emitPythonProgram(prog, ctx) {
 }
 
 function emitJsProgram(prog, ctx) {
+    if (ctx.usesInput) {
+        ctx.lines.push('const fs = require("fs");');
+        ctx.lines.push('const __in = fs.readFileSync(0, "utf8").split(/\\r?\\n/);');
+        ctx.lines.push('let __ip = 0;');
+        ctx.lines.push('function input(msg) {');
+        ctx.lines.push('    if (msg) process.stdout.write(String(msg));');
+        ctx.lines.push('    const line = __in[__ip++] ?? "";');
+        ctx.lines.push('    return line;');
+        ctx.lines.push('}');
+        ctx.lines.push('');
+    }
     for (const fn of prog.functions) {
         withFreshDecl(ctx, () => {
             ctx.lines.push(`function ${fn.name}(${emitFnParams(fn, ctx)}) {`);
@@ -403,7 +498,15 @@ function emitJsProgram(prog, ctx) {
 }
 
 function emitJavaProgram(prog, ctx) {
+    if (ctx.usesInput) ctx.lines.push('import java.util.Scanner;');
     ctx.lines.push('public class Demo {');
+    if (ctx.usesInput) {
+        ctx.lines.push('    static Scanner sc = new Scanner(System.in);');
+        ctx.lines.push('    static String readLine(String p) { System.out.print(p); return sc.nextLine(); }');
+        ctx.lines.push('    static int readInt(String p) { System.out.print(p); return sc.nextInt(); }');
+        ctx.lines.push('    static double readDouble(String p) { System.out.print(p); return sc.nextDouble(); }');
+        ctx.lines.push('');
+    }
     for (const fn of prog.functions) {
         withFreshDecl(ctx, () => {
             const ret = javaType(ctx.fnReturn.get(fn.name) || 'int');
@@ -423,6 +526,11 @@ function emitJavaProgram(prog, ctx) {
 function emitCProgram(prog, ctx) {
     ctx.lines.push('#include <stdio.h>');
     ctx.lines.push('');
+    if (ctx.usesInput) {
+        ctx.lines.push('int read_int(const char* p) { int x = 0; printf("%s", p); scanf("%d", &x); return x; }');
+        ctx.lines.push('double read_double(const char* p) { double x = 0; printf("%s", p); scanf("%lf", &x); return x; }');
+        ctx.lines.push('');
+    }
     for (const fn of prog.functions) {
         withFreshDecl(ctx, () => {
             const ret = cType(ctx.fnReturn.get(fn.name) || 'int');
@@ -443,6 +551,12 @@ function emitCppProgram(prog, ctx) {
     ctx.lines.push('#include <iostream>');
     ctx.lines.push('#include <string>');
     ctx.lines.push('');
+    if (ctx.usesInput) {
+        ctx.lines.push('int read_int(const std::string& p) { int x = 0; std::cout << p; std::cin >> x; return x; }');
+        ctx.lines.push('double read_double(const std::string& p) { double x = 0; std::cout << p; std::cin >> x; return x; }');
+        ctx.lines.push('std::string read_line(const std::string& p) { std::string x; std::cout << p; std::getline(std::cin, x); return x; }');
+        ctx.lines.push('');
+    }
     for (const fn of prog.functions) {
         withFreshDecl(ctx, () => {
             const ret = cppType(ctx.fnReturn.get(fn.name) || 'int');
