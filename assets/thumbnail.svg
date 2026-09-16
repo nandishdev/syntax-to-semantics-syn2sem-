@@ -1,0 +1,121 @@
+<svg width="1200" height="628" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f172a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1e293b;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="accentGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <rect width="1200" height="628" fill="url(#bgGradient)"/>
+  
+  <!-- Top accent bar -->
+  <rect width="1200" height="8" fill="url(#accentGradient)"/>
+  
+  <!-- Main title: Syn2Sem -->
+  <text x="600" y="120" font-family="Arial, sans-serif" font-size="96" font-weight="bold" text-anchor="middle" fill="#ffffff">
+    Syn2Sem
+  </text>
+  
+  <!-- Subtitle -->
+  <text x="600" y="180" font-family="Arial, sans-serif" font-size="42" text-anchor="middle" fill="#94a3b8">
+    AI-Assisted Code Translation Engine
+  </text>
+  
+  <!-- Language pair translations display -->
+  <g>
+    <!-- Python icon and arrow -->
+    <circle cx="150" cy="320" r="35" fill="#3776ab"/>
+    <text x="150" y="335" font-family="Arial, sans-serif" font-size="20" font-weight="bold" text-anchor="middle" fill="white">Py</text>
+    
+    <!-- Arrow 1 -->
+    <line x1="210" y1="320" x2="270" y2="320" stroke="#3b82f6" stroke-width="3" marker-end="url(#arrowhead)"/>
+    <defs>
+      <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+        <polygon points="0 0, 10 3, 0 6" fill="#3b82f6" />
+      </marker>
+    </defs>
+    
+    <!-- JavaScript icon -->
+    <circle cx="330" cy="320" r="35" fill="#f7df1e"/>
+    <text x="330" y="335" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle" fill="black">JS</text>
+    
+    <!-- Java icon and arrow -->
+    <circle cx="600" cy="320" r="35" fill="#007396"/>
+    <text x="600" y="340" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle" fill="white">Java</text>
+    
+    <!-- Arrow 2 -->
+    <line x1="660" y1="320" x2="720" y2="320" stroke="#8b5cf6" stroke-width="3" marker-end="url(#arrowhead2)"/>
+    <defs>
+      <marker id="arrowhead2" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+        <polygon points="0 0, 10 3, 0 6" fill="#8b5cf6" />
+      </marker>
+    </defs>
+    
+    <!-- C++ icon -->
+    <circle cx="780" cy="320" r="35" fill="#00599c"/>
+    <text x="780" y="340" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="white">C++</text>
+    
+    <!-- C icon and arrow -->
+    <circle cx="1050" cy="320" r="35" fill="#a8b9cc"/>
+    <text x="1050" y="340" font-family="Arial, sans-serif" font-size="20" font-weight="bold" text-anchor="middle" fill="black">C</text>
+    
+    <!-- Arrow 3 -->
+    <line x1="990" y1="320" x2="1015" y2="320" stroke="#10b981" stroke-width="3" marker-end="url(#arrowhead3)"/>
+    <defs>
+      <marker id="arrowhead3" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+        <polygon points="0 0, 10 3, 0 6" fill="#10b981" />
+      </marker>
+    </defs>
+  </g>
+  
+  <!-- Key features section -->
+  <g>
+    <!-- Feature 1: AST -->
+    <rect x="80" y="430" width="220" height="140" rx="10" fill="#1e293b" stroke="#3b82f6" stroke-width="2"/>
+    <text x="190" y="460" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#3b82f6">🌳 AST Compiler</text>
+    <text x="190" y="485" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#cbd5e1">Tree-sitter powered</text>
+    <text x="190" y="505" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#cbd5e1">instant translation</text>
+    <text x="190" y="525" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#10b981">100% Offline</text>
+    <text x="190" y="545" font-family="Arial, sans-serif" font-size="11" text-anchor="middle" fill="#94a3b8">Zero dependencies</text>
+  </g>
+  
+  <g>
+    <!-- Feature 2: Code Analysis -->
+    <rect x="330" y="430" width="220" height="140" rx="10" fill="#1e293b" stroke="#8b5cf6" stroke-width="2"/>
+    <text x="440" y="460" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#8b5cf6">📊 Code Analysis</text>
+    <text x="440" y="485" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#cbd5e1">Time & Space Complexity</text>
+    <text x="440" y="505" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#cbd5e1">Halstead Metrics</text>
+    <text x="440" y="525" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#10b981">Semantic Validation</text>
+    <text x="440" y="545" font-family="Arial, sans-serif" font-size="11" text-anchor="middle" fill="#94a3b8">Big-O estimation</text>
+  </g>
+  
+  <g>
+    <!-- Feature 3: Execution -->
+    <rect x="580" y="430" width="220" height="140" rx="10" fill="#1e293b" stroke="#10b981" stroke-width="2"/>
+    <text x="690" y="460" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#10b981">▶ Run & Execute</text>
+    <text x="690" y="485" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#cbd5e1">Compile in-browser</text>
+    <text x="690" y="505" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#cbd5e1">Terminal execution</text>
+    <text x="690" y="525" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#f59e0b">5 Language Support</text>
+    <text x="690" y="545" font-family="Arial, sans-serif" font-size="11" text-anchor="middle" fill="#94a3b8">Real-time feedback</text>
+  </g>
+  
+  <g>
+    <!-- Feature 4: Export -->
+    <rect x="830" y="430" width="220" height="140" rx="10" fill="#1e293b" stroke="#f59e0b" stroke-width="2"/>
+    <text x="940" y="460" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#f59e0b">📤 Export & Share</text>
+    <text x="940" y="485" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#cbd5e1">PDF Export</text>
+    <text x="940" y="505" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#cbd5e1">VS Code Integration</text>
+    <text x="940" y="525" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#ec4899">Web-based tool</text>
+    <text x="940" y="545" font-family="Arial, sans-serif" font-size="11" text-anchor="middle" fill="#94a3b8">Easy sharing</text>
+  </g>
+  
+  <!-- Bottom CTA -->
+  <text x="600" y="610" font-family="Arial, sans-serif" font-size="18" text-anchor="middle" fill="#3b82f6" font-weight="bold">
+    https://syn2sem.vercel.app
+  </text>
+</svg>
