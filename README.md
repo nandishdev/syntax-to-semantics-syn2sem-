@@ -1,6 +1,10 @@
 # Syn2Sem (STOS) - Syntax to Semantics Code Translation Engine
 
-Syn2Sem is a powerful, locally-hosted code translation tool designed primarily for students and developers. It allows seamless translation of source code across 5 major programming languages (Python, JavaScript, Java, C, and C++) supporting all **25 possible language translation pairs**.
+<div align="center">
+  <img src="assets/thumbnail.svg" alt="Syn2Sem - AI-Assisted Code Translation" width="100%">
+</div>
+
+Syn2Sem is a powerful, locally-hosted code translation tool designed primarily for students and developers. It allows seamless translation of source code across 5 major programming languages (Python, JavaScript, Java, C, and C++).
 
 ## 🚀 Features
 
