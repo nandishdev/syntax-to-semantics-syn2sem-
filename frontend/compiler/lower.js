@@ -22,9 +22,15 @@ function lowerStmt(stmt) {
     if (!stmt) return stmt;
     switch (stmt.kind) {
         case 'assign':
-            return { ...stmt, value: lowerExpr(stmt.value) };
+            return { ...stmt, target: stmt.target ? lowerExpr(stmt.target) : null, value: lowerExpr(stmt.value) };
+        case 'multiAssign':
+            return {
+                ...stmt,
+                targets: (stmt.targets || []).map(lowerExpr),
+                values: (stmt.values || []).map(lowerExpr),
+            };
         case 'print':
-            return { ...stmt, args: (stmt.args || []).map(lowerExpr) };
+            return { ...stmt, args: (stmt.args || []).map(lowerExpr), end: stmt.end ? lowerExpr(stmt.end) : null };
         case 'return':
             return { ...stmt, value: stmt.value ? lowerExpr(stmt.value) : null };
         case 'expr':

@@ -37,14 +37,44 @@ function extractProgram(root, lang) {
     return prog;
 }
 
+function isCallToMain(s) {
+    if (!s) return false;
+    let callExpr = null;
+    if (s.kind === 'call') {
+        callExpr = s;
+    } else if (s.kind === 'expr' && s.expr && s.expr.kind === 'call') {
+        callExpr = s.expr;
+    }
+    if (callExpr) {
+        let fnName = null;
+        const target = callExpr.callee || callExpr.fn;
+        if (typeof target === 'string') {
+            fnName = target;
+        } else if (target && typeof target === 'object') {
+            fnName = target.name || target.value;
+        }
+        if (fnName === 'main' && (!callExpr.args || callExpr.args.length === 0)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 function flattenMainGuards(prog) {
     const stmts = [];
-    for (const s of prog.statements) {
+    function processStmt(s) {
         if (s.kind === 'if' && isDunderMain(s.cond)) {
-            stmts.push(...s.then);
+            for (const child of s.then) {
+                processStmt(child);
+            }
+        } else if (isCallToMain(s)) {
+            return;
         } else {
             stmts.push(s);
         }
+    }
+    for (const s of prog.statements) {
+        processStmt(s);
     }
     prog.statements = stmts;
 }
@@ -111,6 +141,11 @@ function extractExpr(node) {
         return { kind: 'list', items: namedChildren(node).map(extractExpr) };
     }
 
+    if (t === 'array_creation_expression') {
+        const init = firstNamedOfTypes(node, ['array_initializer']) || node;
+        return { kind: 'list', items: namedChildren(init).map(extractExpr) };
+    }
+
     if (t === 'subscript' || t === 'subscript_expression' || t === 'array_access') {
         const obj = childField(node, 'object') || childField(node, 'value') || namedChildren(node)[0];
         const idx = childField(node, 'index') || childField(node, 'subscript') || namedChildren(node)[1];
@@ -131,6 +166,12 @@ function extractExpr(node) {
         if (text === 'std::cout' || text === 'cout') return { kind: 'id', name: 'cout' };
         if (text === 'System.out') return { kind: 'id', name: 'System.out' };
         return { kind: 'id', name: node.text };
+    }
+
+    if (t === 'keyword_argument') {
+        const nameNode = childField(node, 'name') || namedChildren(node)[0];
+        const valNode = childField(node, 'value') || namedChildren(node)[1];
+        return { kind: 'kwarg', name: nameNode ? nameNode.text : 'kw', value: extractExpr(valNode) };
     }
 
     if (t === 'argument_list' || t === 'arguments') {
@@ -209,12 +250,18 @@ function isPrintCall(expr) {
 
 function printArgsFromCall(expr) {
     const n = calleeName(expr.callee);
-    let args = expr.args.slice();
+    let args = (expr.args || []).filter((a) => !a || a.kind !== 'kwarg');
     if (n === 'printf' && args.length >= 1 && args[0].kind === 'str') {
         args = args.slice(1);
         if (args.length === 0) return [{ kind: 'str', value: expr.args[0].value.replace(/\n/g, '') }];
     }
     return args;
+}
+
+function printEndFromCall(expr) {
+    if (!expr || !expr.args) return null;
+    const kw = expr.args.find((a) => a && a.kind === 'kwarg' && a.name === 'end');
+    return kw ? kw.value : null;
 }
 
 function isCoutExpr(expr) {
@@ -304,7 +351,7 @@ function extractStmt(node, opts) {
 
     if (t === 'call' || t === 'call_expression' || t === 'method_invocation' || t === 'binary_expression') {
         const expr = extractExpr(node);
-        if (isPrintCall(expr)) return { kind: 'print', args: printArgsFromCall(expr) };
+        if (isPrintCall(expr)) return { kind: 'print', args: printArgsFromCall(expr), end: printEndFromCall(expr) };
         if (isCoutExpr(expr)) return { kind: 'print', args: flattenCout(expr) };
         return { kind: 'expr', expr };
     }
@@ -318,19 +365,38 @@ function extractStmt(node, opts) {
     return null;
 }
 
-function exprStmtFrom(node) {
-    const expr = extractExpr(node);
-    if (isPrintCall(expr)) return { kind: 'print', args: printArgsFromCall(expr) };
-    if (isCoutExpr(expr)) return { kind: 'print', args: flattenCout(expr) };
-    if (node.type === 'assignment' || node.type === 'assignment_expression') return assignFrom(node);
-    return { kind: 'expr', expr };
+function isMultiTargetNode(node) {
+    if (!node) return false;
+    const t = node.type;
+    if (t === 'pattern_list' || t === 'tuple' || t === 'expression_list' || t === 'tuple_pattern') {
+        return namedChildren(node).length > 1;
+    }
+    if (node.text && node.text.includes(',')) return true;
+    return false;
+}
+
+function extractTargetList(node) {
+    if (!node) return [];
+    const t = node.type;
+    if (t === 'pattern_list' || t === 'tuple' || t === 'expression_list' || t === 'tuple_pattern') {
+        return namedChildren(node).map(extractExpr);
+    }
+    return [extractExpr(node)];
 }
 
 function assignFrom(node) {
     const left = childField(node, 'left') || namedChildren(node)[0];
     const right = childField(node, 'right') || namedChildren(node)[1];
-    const name = left ? (left.type === 'identifier' ? left.text : left.text) : 'x';
-    return { kind: 'assign', name, value: extractExpr(right) };
+
+    if (isMultiTargetNode(left)) {
+        const targets = extractTargetList(left);
+        const values = extractTargetList(right);
+        return { kind: 'multiAssign', targets, values };
+    }
+
+    const targetExpr = extractExpr(left);
+    const name = left ? left.text : 'x';
+    return { kind: 'assign', target: targetExpr, name, value: extractExpr(right) };
 }
 
 function declToAssign(node) {

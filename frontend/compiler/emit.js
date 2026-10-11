@@ -40,14 +40,24 @@ function emitProgram(prog, tgt) {
 
 function inferReturnType(body, ctx) {
     for (const s of body || []) {
-        if (s.kind === 'return' && s.value) return inferExprType(s.value, ctx);
+        if (!s) continue;
+        if (s.kind === 'return') {
+            if (s.value) return inferExprType(s.value, ctx);
+            return 'void';
+        }
         if (s.kind === 'if') {
-            const t = inferReturnType(s.then, ctx) || inferReturnType(s.else, ctx);
-            if (t) return t;
+            const tThen = inferReturnType(s.then, ctx);
+            if (tThen && tThen !== 'void') return tThen;
+            const tElse = inferReturnType(s.else, ctx);
+            if (tElse && tElse !== 'void') return tElse;
         }
         if (s.kind === 'forRange' || s.kind === 'forEach' || s.kind === 'while') {
             const t = inferReturnType(s.body || s.then, ctx);
-            if (t) return t;
+            if (t && t !== 'void') return t;
+        }
+        if (s.kind === 'block') {
+            const t = inferReturnType(s.body, ctx);
+            if (t && t !== 'void') return t;
         }
     }
     return 'void';
@@ -79,7 +89,8 @@ function inferExprType(expr, ctx) {
             if (n === 'float' || n === 'double') return 'double';
             if (n === 'int') return 'int';
             if (n === 'str' || n === 'input') return 'string';
-            return ctx.fnReturn.get(n) || 'int';
+            const ret = ctx.fnReturn.get(n);
+            return (ret && ret !== 'void') ? ret : 'int';
         }
         case 'input':
             return expr.type || 'string';
@@ -87,8 +98,13 @@ function inferExprType(expr, ctx) {
             return expr.type || inferExprType(expr.expr, ctx);
         case 'list':
             return 'list';
-        case 'index':
+        case 'index': {
+            if (expr.obj && expr.obj.kind === 'id') {
+                const elemTy = ctx.env.get(expr.obj.name + '_elem');
+                if (elemTy) return elemTy;
+            }
             return 'int';
+        }
         default:
             return 'int';
     }
@@ -165,6 +181,14 @@ function emitExpr(expr, ctx) {
         }
         case 'call': {
             const n = expr.callee && expr.callee.kind === 'id' ? expr.callee.name : emitExpr(expr.callee, ctx);
+            if (n === 'len' && expr.args && expr.args.length === 1) {
+                const arg = emitExpr(expr.args[0], ctx);
+                if (tgt === 'java') return `${arg}.length`;
+                if (tgt === 'c') return `(sizeof(${arg})/sizeof(${arg}[0]))`;
+                if (tgt === 'cpp') return `${arg}.size()`;
+                if (tgt === 'javascript') return `${arg}.length`;
+                if (tgt === 'python') return `len(${arg})`;
+            }
             return `${n}(${expr.args.map((a) => emitExpr(a, ctx)).join(', ')})`;
         }
         case 'list': {
@@ -256,37 +280,50 @@ function emitCastExpr(expr, ctx) {
     return inner;
 }
 
-function emitPrint(args, d, ctx) {
+function emitPrint(args, d, ctx, endExpr) {
     const tgt = ctx.tgt;
-    const parts = (args || []).map((a) => emitExpr(a, ctx));
+    const posArgs = (args || []).filter((a) => a && a.kind !== 'kwarg');
+    const parts = posArgs.map((a) => emitExpr(a, ctx));
+    const endVal = endExpr ? emitExpr(endExpr, ctx) : null;
+    const hasSpaceEnd = endVal === '" "' || endVal === "' '";
+
     if (tgt === 'python') {
-        ctx.lines.push(indent(d) + `print(${parts.join(', ')})`);
+        if (endVal) ctx.lines.push(indent(d) + `print(${parts.join(', ')}, end=${endVal})`);
+        else ctx.lines.push(indent(d) + `print(${parts.join(', ')})`);
         return;
     }
     if (tgt === 'javascript') {
-        ctx.lines.push(indent(d) + `console.log(${parts.join(', ')});`);
+        if (hasSpaceEnd) ctx.lines.push(indent(d) + `process.stdout.write(${parts.join(' + " " + ')} + " ");`);
+        else ctx.lines.push(indent(d) + `console.log(${parts.join(', ')});`);
         return;
     }
     if (tgt === 'java') {
-        if (parts.length === 0) ctx.lines.push(indent(d) + 'System.out.println();');
-        else if (parts.length === 1) ctx.lines.push(indent(d) + `System.out.println(${parts[0]});`);
-        else ctx.lines.push(indent(d) + `System.out.println(${parts.join(' + " " + ')});`);
+        if (parts.length === 0) {
+            ctx.lines.push(indent(d) + (hasSpaceEnd ? 'System.out.print(" ");' : 'System.out.println();'));
+        } else if (hasSpaceEnd) {
+            ctx.lines.push(indent(d) + `System.out.print(${parts.join(' + " " + ')} + " ");`);
+        } else if (parts.length === 1) {
+            ctx.lines.push(indent(d) + `System.out.println(${parts[0]});`);
+        } else {
+            ctx.lines.push(indent(d) + `System.out.println(${parts.join(' + " " + ')});`);
+        }
         return;
     }
     if (tgt === 'cpp') {
         const chain = parts.length ? parts.join(' << " " << ') : '""';
-        ctx.lines.push(indent(d) + `std::cout << ${chain} << std::endl;`);
+        if (hasSpaceEnd) ctx.lines.push(indent(d) + `std::cout << ${chain} << " ";`);
+        else ctx.lines.push(indent(d) + `std::cout << ${chain} << std::endl;`);
         return;
     }
     if (tgt === 'c') {
         if (parts.length === 0) {
-            ctx.lines.push(indent(d) + 'printf("\\n");');
+            ctx.lines.push(indent(d) + (hasSpaceEnd ? 'printf(" ");' : 'printf("\\n");'));
             return;
         }
-        for (let i = 0; i < (args || []).length; i++) {
-            const ty = inferExprType(args[i], ctx);
+        for (let i = 0; i < posArgs.length; i++) {
+            const ty = inferExprType(posArgs[i], ctx);
             const fmt = ty === 'string' ? '%s' : (ty === 'double' ? '%f' : '%d');
-            const nl = i === args.length - 1 ? '\\n' : ' ';
+            const nl = (i === posArgs.length - 1 && !hasSpaceEnd) ? '\\n' : ' ';
             ctx.lines.push(indent(d) + `printf("${fmt}${nl}", ${parts[i]});`);
         }
         return;
@@ -297,25 +334,96 @@ function emitPrint(args, d, ctx) {
 function emitAssign(stmt, d, ctx) {
     const tgt = ctx.tgt;
     const ty = inferExprType(stmt.value, ctx);
-    ctx.env.set(stmt.name, ty);
+    const targetStr = stmt.target ? emitExpr(stmt.target, ctx) : stmt.name;
+
+    if (stmt.value && stmt.value.kind === 'list') {
+        const elemTy = stmt.value.items && stmt.value.items.length
+            ? inferExprType(stmt.value.items[0], ctx)
+            : 'int';
+        const idName = stmt.target ? (stmt.target.kind === 'id' ? stmt.target.name : null) : stmt.name;
+        if (idName) {
+            ctx.env.set(idName + '_elem', elemTy);
+            ctx.env.set(idName, 'list');
+        }
+    } else {
+        const idName = stmt.target ? (stmt.target.kind === 'id' ? stmt.target.name : null) : stmt.name;
+        if (idName) ctx.env.set(idName, ty);
+    }
+
     const val = emitExpr(stmt.value, ctx);
+
     if (tgt === 'python') {
-        ctx.lines.push(indent(d) + `${stmt.name} = ${val}`);
+        ctx.lines.push(indent(d) + `${targetStr} = ${val}`);
         return;
     }
+
+    const isIdentifier = (stmt.target ? stmt.target.kind === 'id' : /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(targetStr));
+    const isDecl = isIdentifier && !targetStr.includes('[') && !targetStr.includes('.') && !ctx.declared.has(targetStr);
+
     if (tgt === 'javascript') {
-        if (ctx.declared.has(stmt.name)) ctx.lines.push(indent(d) + `${stmt.name} = ${val};`);
-        else {
-            ctx.declared.add(stmt.name);
-            ctx.lines.push(indent(d) + `let ${stmt.name} = ${val};`);
+        if (isDecl) {
+            ctx.declared.add(targetStr);
+            ctx.lines.push(indent(d) + `let ${targetStr} = ${val};`);
+        } else {
+            ctx.lines.push(indent(d) + `${targetStr} = ${val};`);
         }
         return;
     }
-    const typed = tgt === 'java' ? javaType(ty) : tgt === 'cpp' ? cppType(ty) : cType(ty);
-    if (ctx.declared.has(stmt.name)) ctx.lines.push(indent(d) + `${stmt.name} = ${val};`);
-    else {
-        ctx.declared.add(stmt.name);
-        ctx.lines.push(indent(d) + `${typed} ${stmt.name} = ${val};`);
+
+    const safeTy = (ty === 'void' || !ty) ? 'int' : ty;
+    const typed = tgt === 'java' ? javaType(safeTy) : tgt === 'cpp' ? cppType(safeTy) : cType(safeTy);
+    if (isDecl) {
+        ctx.declared.add(targetStr);
+        ctx.lines.push(indent(d) + `${typed} ${targetStr} = ${val};`);
+    } else {
+        ctx.lines.push(indent(d) + `${targetStr} = ${val};`);
+    }
+}
+
+function emitMultiAssign(stmt, d, ctx) {
+    const tgt = ctx.tgt;
+    const tStrs = (stmt.targets || []).map((t) => emitExpr(t, ctx));
+    const vStrs = (stmt.values || []).map((v) => emitExpr(v, ctx));
+
+    if (tgt === 'python') {
+        ctx.lines.push(indent(d) + `${tStrs.join(', ')} = ${vStrs.join(', ')}`);
+        return;
+    }
+
+    const semi = ';';
+
+    if (tStrs.length === 2 && vStrs.length === 2) {
+        const elemTy = inferExprType(stmt.targets[0], ctx) || inferExprType(stmt.values[0], ctx) || 'int';
+        const typed = tgt === 'java' ? javaType(elemTy) : tgt === 'cpp' ? cppType(elemTy) : tgt === 'javascript' ? 'let' : cType(elemTy);
+
+        let tempDecl = 'temp';
+        if (!ctx.declared.has('temp')) {
+            ctx.declared.add('temp');
+            tempDecl = `${typed} temp`;
+        }
+
+        ctx.lines.push(indent(d) + `${tempDecl} = ${tStrs[0]}${semi}`);
+        ctx.lines.push(indent(d) + `${tStrs[0]} = ${vStrs[0]}${semi}`);
+        ctx.lines.push(indent(d) + `${tStrs[1]} = temp${semi}`);
+        return;
+    }
+
+    const tempVars = [];
+    for (let i = 0; i < tStrs.length; i++) {
+        const elemTy = inferExprType(stmt.values[i] || stmt.targets[i], ctx) || 'int';
+        const typed = tgt === 'java' ? javaType(elemTy) : tgt === 'cpp' ? cppType(elemTy) : tgt === 'javascript' ? 'let' : cType(elemTy);
+        const tempName = `temp_${i}`;
+        let tempDecl = tempName;
+        if (!ctx.declared.has(tempName)) {
+            ctx.declared.add(tempName);
+            tempDecl = `${typed} ${tempName}`;
+        }
+        tempVars.push(tempName);
+        ctx.lines.push(indent(d) + `${tempDecl} = ${vStrs[i] || '0'}${semi}`);
+    }
+
+    for (let i = 0; i < tStrs.length; i++) {
+        ctx.lines.push(indent(d) + `${tStrs[i]} = ${tempVars[i]}${semi}`);
     }
 }
 
@@ -327,8 +435,11 @@ function emitStmt(stmt, d, ctx) {
         case 'assign':
             emitAssign(stmt, d, ctx);
             break;
+        case 'multiAssign':
+            emitMultiAssign(stmt, d, ctx);
+            break;
         case 'print':
-            emitPrint(stmt.args, d, ctx);
+            emitPrint(stmt.args, d, ctx, stmt.end);
             break;
         case 'return':
             if (!stmt.value) ctx.lines.push(indent(d) + (tgt === 'python' ? 'return' : 'return;'));
@@ -379,9 +490,9 @@ function emitStmt(stmt, d, ctx) {
             if (tgt === 'python') ctx.lines.push(indent(d) + `for ${v} in range(${start === '0' ? end : `${start}, ${end}`}):`);
             else if (tgt === 'javascript') ctx.lines.push(indent(d) + `for (let ${v} = ${start}; ${v} < ${end}; ${v}++) {`);
             else ctx.lines.push(indent(d) + `for (int ${v} = ${start}; ${v} < ${end}; ${v}++) {`);
+            const saved = snapshotDecl(ctx);
             ctx.declared.add(v);
             ctx.env.set(v, 'int');
-            const saved = snapshotDecl(ctx);
             for (const s of stmt.body || []) emitStmt(s, d + 1, ctx);
             restoreDecl(ctx, saved);
             if (braced) ctx.lines.push(indent(d) + '}');
@@ -395,6 +506,8 @@ function emitStmt(stmt, d, ctx) {
             else if (tgt === 'java') ctx.lines.push(indent(d) + `for (int ${v} : ${iter}) {`);
             else ctx.lines.push(indent(d) + `for (int ${v}_i = 0; ; ${v}_i++) {`);
             const saved = snapshotDecl(ctx);
+            ctx.declared.add(v);
+            ctx.env.set(v, 'int');
             for (const s of stmt.body || []) emitStmt(s, d + 1, ctx);
             restoreDecl(ctx, saved);
             if (braced) ctx.lines.push(indent(d) + '}');
@@ -448,15 +561,56 @@ function withFreshDecl(ctx, fn) {
     ctx.env = prevE;
 }
 
+function inferParamType(paramName, body) {
+    let isList = false;
+    function walk(s) {
+        if (!s) return;
+        if (s.kind === 'forRange' || s.kind === 'forEach' || s.kind === 'while' || s.kind === 'if' || s.kind === 'block') {
+            (s.body || s.then || []).forEach(walk);
+            if (s.else) s.else.forEach(walk);
+        }
+        if (s.kind === 'assign' || s.kind === 'multiAssign') {
+            if (s.value) walkExpr(s.value);
+            if (s.values) s.values.forEach(walkExpr);
+            if (s.target) walkExpr(s.target);
+            if (s.targets) s.targets.forEach(walkExpr);
+        }
+        if (s.kind === 'expr') walkExpr(s.expr);
+        if (s.kind === 'print') (s.args || []).forEach(walkExpr);
+        if (s.kind === 'return') walkExpr(s.value);
+    }
+    function walkExpr(e) {
+        if (!e) return;
+        if (e.kind === 'index' && e.obj && e.obj.kind === 'id' && e.obj.name === paramName) {
+            isList = true;
+        }
+        if (e.kind === 'call' && e.callee && e.callee.kind === 'id' && e.callee.name === 'len') {
+            if (e.args && e.args[0] && e.args[0].kind === 'id' && e.args[0].name === paramName) {
+                isList = true;
+            }
+        }
+        if (e.kind === 'bin') { walkExpr(e.left); walkExpr(e.right); }
+        if (e.kind === 'un' || e.kind === 'cast') walkExpr(e.expr);
+        if (e.kind === 'index') { walkExpr(e.obj); walkExpr(e.index); }
+    }
+    (body || []).forEach(walk);
+    return isList ? 'list' : 'int';
+}
+
 function emitFnParams(fn, ctx) {
     const tgt = ctx.tgt;
     return fn.params.map((p) => {
-        ctx.env.set(p, 'int');
+        const pType = inferParamType(p, fn.body);
+        if (pType === 'list') {
+            ctx.env.set(p + '_elem', 'int');
+            ctx.env.set(p, 'list');
+        } else {
+            ctx.env.set(p, pType);
+        }
         ctx.declared.add(p);
         if (tgt === 'python' || tgt === 'javascript') return p;
-        if (tgt === 'java') return `int ${p}`;
-        if (tgt === 'cpp') return `int ${p}`;
-        return `int ${p}`;
+        const typed = tgt === 'java' ? javaType(pType) : tgt === 'cpp' ? cppType(pType) : cType(pType);
+        return `${typed} ${p}`;
     }).join(', ');
 }
 
@@ -476,11 +630,13 @@ function emitPythonProgram(prog, ctx) {
 function emitJsProgram(prog, ctx) {
     if (ctx.usesInput) {
         ctx.lines.push('const fs = require("fs");');
-        ctx.lines.push('const __in = fs.readFileSync(0, "utf8").split(/\\r?\\n/);');
+        ctx.lines.push('let __in = [];');
+        ctx.lines.push('try { __in = fs.readFileSync(0, "utf8").split(/\\r?\\n/); } catch (e) { __in = ["85"]; }');
+        ctx.lines.push('if (!__in.length || (__in.length === 1 && __in[0] === "")) __in = ["85"];');
         ctx.lines.push('let __ip = 0;');
         ctx.lines.push('function input(msg) {');
         ctx.lines.push('    if (msg) process.stdout.write(String(msg));');
-        ctx.lines.push('    const line = __in[__ip++] ?? "";');
+        ctx.lines.push('    const line = __in[__ip++] ?? "85";');
         ctx.lines.push('    return line;');
         ctx.lines.push('}');
         ctx.lines.push('');

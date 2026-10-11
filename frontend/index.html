@@ -9,7 +9,7 @@
     <!-- Font Awesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="styles.css?v=2.2">
+    <link rel="stylesheet" href="styles.css?v=2.3">
     <!-- jsPDF for PDF Export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
@@ -31,6 +31,69 @@
             </div>
             <div class="history-footer">
                 <button id="btn-clear-history" class="btn btn-outline" style="width: 100%;"><i class="fa-solid fa-trash"></i> Clear History</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- API Key & Compiler Settings Modal Overlay -->
+    <div id="api-overlay" class="api-overlay hidden">
+        <div class="api-panel" style="max-height: 90vh; overflow-y: auto;">
+            <div class="api-header">
+                <h3><i class="fa-solid fa-sliders"></i> Cloud AI & Compiler Settings</h3>
+                <button id="btn-close-api" class="icon-btn"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="api-body">
+                <p style="font-size: 0.9rem; color: var(--text-muted, #94a3b8); margin-bottom: 15px; line-height: 1.4;">
+                    Configure AI translation provider and code execution engine (Piston / Cloud Compiler / Local).
+                </p>
+
+                <h4 style="font-size: 0.95rem; margin-bottom: 10px; color: var(--primary-color); display: flex; align-items: center; gap: 6px;"><i class="fa-solid fa-brain"></i> AI Translation Engine</h4>
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label for="ai-provider" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 5px;">AI Provider</label>
+                    <select id="ai-provider" class="control-select" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--glass-border); background: var(--bg-color); color: var(--text-color);">
+                        <option value="gemini">Google Gemini (Recommended, Fast & Free)</option>
+                        <option value="groq">Groq (Ultra-fast, Llama 3.3)</option>
+                        <option value="openai">OpenAI (GPT-4o Mini / GPT-4o)</option>
+                        <option value="anthropic">Anthropic Claude</option>
+                        <option value="openrouter">OpenRouter</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label for="ai-api-key" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 5px;">AI API Key</label>
+                    <input type="password" id="ai-api-key" placeholder="Paste your API key here (e.g. AIza... or AQ... or gsk_...)" style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid var(--glass-border); background: var(--bg-color); color: var(--text-color); font-size: 0.9rem;">
+                </div>
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label for="ai-model" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 5px;">AI Model (Optional)</label>
+                    <input type="text" id="ai-model" placeholder="Leave empty for default (e.g. gemini-flash-latest)" style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid var(--glass-border); background: var(--bg-color); color: var(--text-color); font-size: 0.9rem;">
+                </div>
+
+                <hr style="border: 0; border-top: 1px solid var(--glass-border); margin: 15px 0;">
+
+                <h4 style="font-size: 0.95rem; margin-bottom: 10px; color: var(--primary-color); display: flex; align-items: center; gap: 6px;"><i class="fa-solid fa-play"></i> Code Execution Runner (Compiler API)</h4>
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label for="execution-runner" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 5px;">Default Runner</label>
+                    <select id="execution-runner" class="control-select" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--glass-border); background: var(--bg-color); color: var(--text-color);">
+                        <option value="piston">Piston & Cloud Compiler (Judge0 CE Fallback)</option>
+                        <option value="cloud">Cloud Compiler API (Judge0 CE Direct)</option>
+                        <option value="local">Local Native Compilers (GCC, Javac, Python)</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label for="piston-url" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 5px;">Custom Piston URL (Optional)</label>
+                    <input type="text" id="piston-url" placeholder="https://emkc.org/api/v2/piston/execute or self-hosted" style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid var(--glass-border); background: var(--bg-color); color: var(--text-color); font-size: 0.9rem;">
+                </div>
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label for="piston-key" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 5px;">Piston API Key (Optional)</label>
+                    <input type="password" id="piston-key" placeholder="Paste Piston key if using authenticated instance" style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid var(--glass-border); background: var(--bg-color); color: var(--text-color); font-size: 0.9rem;">
+                </div>
+
+                <div id="api-status-badge" style="font-size: 0.85rem; padding: 10px 12px; border-radius: 6px; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); margin-top: 10px;">
+                    Active AI: <strong id="api-status-text" style="color: var(--primary-color);">AST Compiler (Offline)</strong>
+                </div>
+            </div>
+            <div class="api-footer" style="padding: 15px 20px; border-top: 1px solid var(--glass-border); display: flex; gap: 10px;">
+                <button id="btn-save-api-key" class="btn btn-gradient" style="flex: 1;"><i class="fa-solid fa-floppy-disk"></i> Save Settings</button>
+                <button id="btn-remove-api-key" class="btn btn-outline" style="color: #ff6b6b; border-color: #ff6b6b;"><i class="fa-solid fa-trash"></i> Reset</button>
             </div>
         </div>
     </div>
@@ -82,6 +145,7 @@
             <li><a href="#team">Team</a></li>
         </ul>
         <div class="nav-actions">
+            <button id="btn-api-settings" class="icon-btn" style="display: none;"></button>
             <button id="btn-history" class="icon-btn" title="Translation History"><i class="fa-solid fa-clock-rotate-left"></i></button>
             <button id="theme-toggle" class="icon-btn"><i class="fa-solid fa-sun"></i></button>
             <div class="hamburger">
@@ -96,7 +160,7 @@
         <div class="hero-content">
             <h1 class="project-title">Syntax-to-Semantics Gap Prediction<br>& Code Translation</h1>
             <p class="hero-desc">
-                An AI-powered system that predicts syntax-to-semantics gaps in source code and translates code between multiple programming languages while preserving functionality.
+                An offline AST compilation engine specializing in seamless, high-fidelity translation across <strong>Java, Python, and C</strong> while preserving complete execution semantics.
             </p>
             <div class="typing-container">
                 <span id="typing-text"></span><span class="cursor">|</span>
@@ -117,8 +181,8 @@
         <div class="features-grid">
             <div class="feature-card glass-card">
                 <div class="feature-icon"><i class="fa-solid fa-language"></i></div>
-                <h3>Multi-language Code Translation</h3>
-                <p>Seamlessly convert code across popular languages while retaining identical logic.</p>
+                <h3>Java • Python • C Translation Matrix</h3>
+                <p>Seamlessly convert code across Java, Python, and C while retaining identical logic and type safety.</p>
             </div>
             <div class="feature-card glass-card">
                 <div class="feature-icon"><i class="fa-solid fa-bug"></i></div>
@@ -154,7 +218,16 @@
             <h2>Live Demo</h2>
             <div class="underline"></div>
         </div>
-        <div class="demo-container glass-card">
+
+        <div class="demo-container glass-card" id="demo-studio-container">
+            <!-- Active Development Notification Banner -->
+            <div id="dev-lang-banner" style="display: none; background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(234, 179, 8, 0.35); color: #fef08a; padding: 10px 18px; border-radius: 8px; margin: 12px 15px 0 15px; align-items: center; justify-content: space-between; font-size: 0.88rem; box-shadow: 0 4px 15px rgba(0,0,0,0.25);">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <i class="fa-solid fa-person-digging" style="color: #fbbf24; font-size: 1.15rem;"></i>
+                    <span><strong>Under Active Development:</strong> We are currently working on C++ and JavaScript support. Full support is active for Java, Python, and C.</span>
+                </div>
+                <button type="button" id="btn-close-dev-banner" style="background: none; border: none; color: #fef08a; cursor: pointer; font-size: 1.1rem; padding: 2px 6px;"><i class="fa-solid fa-xmark"></i></button>
+            </div>
             
             <div class="editor-layout">
                 <!-- Left Panel: Source -->
@@ -163,12 +236,18 @@
                         <label for="source-lang">Source Language:</label>
                         <select id="source-lang" class="lang-select">
                             <option value="java">Java</option>
-                            <option value="c">C</option>
-                            <option value="cpp">C++</option>
                             <option value="python">Python</option>
-                            <option value="javascript">JavaScript</option>
+                            <option value="c">C</option>
+                            <option value="cpp">C++ (In Development)</option>
+                            <option value="javascript">JavaScript (In Development)</option>
                         </select>
                         <div class="theme-toggle-editor icon-btn"><i class="fa-solid fa-palette"></i></div>
+                    </div>
+                    <div class="lang-presets-bar" style="display: flex; gap: 8px; padding: 6px 15px; background: rgba(0,0,0,0.2); border-bottom: 1px solid rgba(255,255,255,0.05); align-items: center; flex-wrap: wrap;">
+                        <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Main Languages:</span>
+                        <button class="btn-preset-lang" data-lang="java" style="padding: 3px 10px; font-size: 0.75rem; border-radius: 12px; background: rgba(6, 182, 212, 0.15); color: var(--primary-color); border: 1px solid rgba(6, 182, 212, 0.3); cursor: pointer; font-weight: 600;"><i class="fa-brands fa-java"></i> Java</button>
+                        <button class="btn-preset-lang" data-lang="python" style="padding: 3px 10px; font-size: 0.75rem; border-radius: 12px; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); cursor: pointer; font-weight: 600;"><i class="fa-brands fa-python"></i> Python</button>
+                        <button class="btn-preset-lang" data-lang="c" style="padding: 3px 10px; font-size: 0.75rem; border-radius: 12px; background: rgba(234, 179, 8, 0.15); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.3); cursor: pointer; font-weight: 600;"><i class="fa-solid fa-c"></i> C</button>
                     </div>
                     <div class="code-area-wrapper">
                         <div id="source-editor" class="monaco-container"></div>
@@ -185,11 +264,11 @@
 
                     <div class="panel-actions" style="justify-content: space-between;">
                         <div style="display: flex; gap: 10px; align-items: center;">
-                            <button id="btn-analyze" class="btn btn-outline">Analyze Code</button>
-                            <button id="btn-clear" class="btn btn-danger">Clear</button>
+                            <button id="btn-analyze" class="btn btn-outline"><i class="fa-solid fa-magnifying-glass"></i> Analyze Code</button>
+                            <button id="btn-clear" class="btn btn-danger"><i class="fa-solid fa-trash-can"></i> Clear</button>
                         </div>
                         <div style="display: flex; gap: 10px; align-items: center;">
-                            <button id="btn-translate" class="btn btn-gradient"><i class="fa-solid fa-language"></i> Translate</button>
+                            <button id="btn-translate" class="btn btn-gradient"><i class="fa-solid fa-wand-magic-sparkles"></i> Translate Code</button>
                         </div>
                     </div>
                 </div>
@@ -202,8 +281,8 @@
                             <option value="python">Python</option>
                             <option value="java">Java</option>
                             <option value="c">C</option>
-                            <option value="cpp">C++</option>
-                            <option value="javascript">JavaScript</option>
+                            <option value="cpp">C++ (In Development)</option>
+                            <option value="javascript">JavaScript (In Development)</option>
                         </select>
                         
                         <div class="target-actions">
@@ -216,7 +295,7 @@
                             
                             <!-- Analysis Group -->
                             <div class="action-group desktop-only" style="display: flex; flex-direction: column; align-items: center; gap: 2px; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 15px;">
-                                <span style="font-size: 0.65rem; color: #eab308; text-shadow: 0 0 8px rgba(234,179,8,0.4); text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">Gap</span>
+                                <span style="font-size: 0.65rem; color: #eab308; text-shadow: 0 0 8px rgba(234,179,8,0.4); text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">Diff</span>
                                 <button id="btn-toggle-diff" class="icon-btn" title="Toggle Semantic Diff View"><i class="fa-solid fa-code-compare"></i></button>
                             </div>
 
@@ -257,7 +336,7 @@
                             <p id="loading-text">Analyzing...</p>
                         </div>
                         <div id="target-editor" class="monaco-container"></div>
-                        <div id="diff-header" class="hidden" style="padding: 10px 15px; font-weight: bold; background: rgba(0,0,0,0.2); border-bottom: 1px solid rgba(255,255,255,0.1); color: var(--accent-color); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;"><i class="fa-solid fa-code-compare"></i> Gap Analysis</div>
+                        <div id="diff-header" class="hidden" style="padding: 10px 15px; font-weight: bold; background: rgba(0,0,0,0.2); border-bottom: 1px solid rgba(255,255,255,0.1); color: var(--accent-color); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;"><i class="fa-solid fa-code-compare"></i> Semantic Diff View</div>
                         <div id="diff-editor" class="monaco-container hidden"></div>
                     </div>
                     
@@ -506,6 +585,7 @@
     <!-- jsPDF for PDF export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js"></script>
-    <script src="script.js?v=3.9"></script>
+    <script src="script.js?v=4.0"></script>
 </body>
 </html>
+

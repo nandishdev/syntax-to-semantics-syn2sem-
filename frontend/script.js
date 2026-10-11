@@ -250,6 +250,121 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     // --- End History Logic ---
 
+    // --- API Key & Cloud AI Settings Logic ---
+    const apiOverlay = document.getElementById('api-overlay');
+    const btnApiSettings = document.getElementById('btn-api-settings');
+    const btnCloseApi = document.getElementById('btn-close-api');
+    const btnSaveApiKey = document.getElementById('btn-save-api-key');
+    const btnRemoveApiKey = document.getElementById('btn-remove-api-key');
+    const selectAiProvider = document.getElementById('ai-provider');
+    const inputAiApiKey = document.getElementById('ai-api-key');
+    const inputAiModel = document.getElementById('ai-model');
+    const selectExecutionRunner = document.getElementById('execution-runner');
+    const inputPistonUrl = document.getElementById('piston-url');
+    const inputPistonKey = document.getElementById('piston-key');
+    const apiStatusText = document.getElementById('api-status-text');
+
+    async function checkApiConfig() {
+        try {
+            const res = await fetch('/api-config');
+            if (res.ok) {
+                const data = await res.json();
+                if (data.configured) {
+                    if (apiStatusText) apiStatusText.innerHTML = `<span style="color: #10b981;">Connected: ${data.provider.toUpperCase()} (${data.maskedKey})</span>`;
+                    if (data.provider && selectAiProvider) selectAiProvider.value = data.provider;
+                    if (data.model && inputAiModel) inputAiModel.value = data.model;
+                } else {
+                    if (apiStatusText) apiStatusText.innerHTML = `<span style="color: #94a3b8;">AST Compiler (Offline mode)</span>`;
+                }
+
+                if (selectExecutionRunner && data.runner) {
+                    selectExecutionRunner.value = data.runner;
+                }
+                if (inputPistonUrl && data.pistonUrl) {
+                    inputPistonUrl.value = data.pistonUrl;
+                }
+            }
+        } catch (e) {
+            if (apiStatusText) apiStatusText.textContent = 'AST Compiler (Offline mode)';
+        }
+    }
+
+    if (btnApiSettings) {
+        btnApiSettings.addEventListener('click', () => {
+            checkApiConfig();
+            if (apiOverlay) apiOverlay.classList.remove('hidden');
+        });
+    }
+    if (btnCloseApi) {
+        btnCloseApi.addEventListener('click', () => {
+            if (apiOverlay) apiOverlay.classList.add('hidden');
+        });
+    }
+    if (apiOverlay) {
+        apiOverlay.addEventListener('click', (e) => {
+            if (e.target === apiOverlay) apiOverlay.classList.add('hidden');
+        });
+    }
+
+    if (btnSaveApiKey) {
+        btnSaveApiKey.addEventListener('click', async () => {
+            const apiKey = (inputAiApiKey.value || '').trim();
+            const provider = selectAiProvider ? selectAiProvider.value : 'gemini';
+            const model = (inputAiModel.value || '').trim();
+            const runner = selectExecutionRunner ? selectExecutionRunner.value : 'piston';
+            const pistonUrl = (inputPistonUrl ? inputPistonUrl.value : '').trim();
+            const pistonKey = (inputPistonKey ? inputPistonKey.value : '').trim();
+
+            const payload = {
+                runner,
+                provider
+            };
+            if (apiKey) payload.apiKey = apiKey;
+            if (model) payload.model = model;
+            if (pistonUrl !== undefined) payload.pistonUrl = pistonUrl;
+            if (pistonKey !== undefined) payload.pistonKey = pistonKey;
+
+            try {
+                const res = await fetch('/set-api-key', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (res.ok) {
+                    showToast(`Settings saved! Runner: ${runner.toUpperCase()}`);
+                    if (inputAiApiKey) inputAiApiKey.value = '';
+                    checkApiConfig();
+                    setTimeout(() => { if (apiOverlay) apiOverlay.classList.add('hidden'); }, 600);
+                } else {
+                    alert('Failed to save settings.');
+                }
+            } catch (err) {
+                alert('Failed to connect to server to save settings.');
+            }
+        });
+    }
+
+    if (btnRemoveApiKey) {
+        btnRemoveApiKey.addEventListener('click', async () => {
+            try {
+                await fetch('/set-api-key', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ apiKey: '', provider: '', model: '', runner: 'piston', pistonUrl: '', pistonKey: '' })
+                });
+                if (inputAiApiKey) inputAiApiKey.value = '';
+                if (inputAiModel) inputAiModel.value = '';
+                if (inputPistonUrl) inputPistonUrl.value = '';
+                if (inputPistonKey) inputPistonKey.value = '';
+                showToast('Settings reset to default.');
+                checkApiConfig();
+            } catch (e) {}
+        });
+    }
+
+    checkApiConfig();
+    // --- End API Key Logic ---
+
     // Load Monaco Editor
     require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.41.0/min/vs' }});
     require(['vs/editor/editor.main'], function() {
@@ -421,23 +536,103 @@ document.addEventListener('DOMContentLoaded', () => {
             editorThemeToggle.innerHTML = isEditorLight ? '<i class="fa-solid fa-moon"></i>' : '<i class="fa-solid fa-palette"></i>';
         });
 
+        // Active Development Notification Helper for C++ & JavaScript
+        const devBanner = document.getElementById('dev-lang-banner');
+        const btnCloseDevBanner = document.getElementById('btn-close-dev-banner');
+        if (btnCloseDevBanner && devBanner) {
+            btnCloseDevBanner.addEventListener('click', () => {
+                devBanner.style.display = 'none';
+            });
+        }
+
+        function checkDevLang(lang, position = 'Language') {
+            if (lang === 'cpp' || lang === 'javascript') {
+                const langName = lang === 'cpp' ? 'C++' : 'JavaScript';
+                showToast(`🚧 We are currently working on ${langName} support! Full support is active for Java, Python, and C.`, 'warning', 4500);
+                if (devBanner) devBanner.style.display = 'flex';
+                return true;
+            } else {
+                if (devBanner && sourceLang.value !== 'cpp' && sourceLang.value !== 'javascript' && targetLang.value !== 'cpp' && targetLang.value !== 'javascript') {
+                    devBanner.style.display = 'none';
+                }
+                return false;
+            }
+        }
+
         // Language Dropdowns change model languages
         sourceLang.addEventListener('change', () => {
             monaco.editor.setModelLanguage(sourceEditor.getModel(), sourceLang.value);
+            checkDevLang(sourceLang.value, 'Source');
         });
-        targetLang.addEventListener('change', () => {
-            monaco.editor.setModelLanguage(targetEditor.getModel(), targetLang.value);
+        sourceLang.addEventListener('click', () => {
+            if (sourceLang.value === 'cpp' || sourceLang.value === 'javascript') {
+                checkDevLang(sourceLang.value, 'Source');
+            }
         });
 
-        // Predefined Translations (Minimum 6)
+        targetLang.addEventListener('change', () => {
+            monaco.editor.setModelLanguage(targetEditor.getModel(), targetLang.value);
+            checkDevLang(targetLang.value, 'Target');
+        });
+        targetLang.addEventListener('click', () => {
+            if (targetLang.value === 'cpp' || targetLang.value === 'javascript') {
+                checkDevLang(targetLang.value, 'Target');
+            }
+        });
+
+        // Quick Preset Language Selectors for Languages (Java, Python, C, C++, JavaScript)
+        document.querySelectorAll('.btn-preset-lang').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const lang = btn.getAttribute('data-lang');
+                sourceLang.value = lang;
+                monaco.editor.setModelLanguage(sourceEditor.getModel(), lang);
+                
+                let sample = '';
+                if (lang === 'java') {
+                    sample = `public class Demo {\n  public static void main(String[] args) {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n      System.out.println("Value: " + i);\n    }\n  }\n}`;
+                    showToast(`Loaded ${lang.toUpperCase()} Main Language Sample`);
+                } else if (lang === 'python') {
+                    sample = `n = 5\nfor i in range(n):\n    print(f"Value: {i}")\n`;
+                    showToast(`Loaded ${lang.toUpperCase()} Main Language Sample`);
+                } else if (lang === 'c') {
+                    sample = `#include <stdio.h>\n\nint main(void) {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n        printf("Value: %d\\n", i);\n    }\n    return 0;\n}\n`;
+                    showToast(`Loaded ${lang.toUpperCase()} Main Language Sample`);
+                } else if (lang === 'cpp') {
+                    sample = `#include <iostream>\n\nint main() {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n        std::cout << "Value: " << i << std::endl;\n    }\n    return 0;\n}\n`;
+                    checkDevLang('cpp');
+                } else if (lang === 'javascript') {
+                    sample = `const n = 5;\nfor (let i = 0; i < n; i++) {\n    console.log("Value: " + i);\n}\n`;
+                    checkDevLang('javascript');
+                }
+                sourceEditor.setValue(sample);
+            });
+        });
+
+        // Predefined Translations (Core Matrix for Java, Python, C)
         const translationsMap = {
             'java_python': {
-                input: `public class Demo{\n  public static void main(String args[]){\n    System.out.println("Hello");\n  }\n}`,
-                output: `print("Hello")`
+                input: `public class Demo {\n  public static void main(String[] args) {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n      System.out.println("Value: " + i);\n    }\n  }\n}`,
+                output: `n = 5\nfor i in range(n):\n    print("Value: " + str(i))`
             },
             'python_java': {
-                input: `print("Hello")`,
-                output: `public class Demo{\n  public static void main(String args[]){\n    System.out.println("Hello");\n  }\n}`
+                input: `n = 5\nfor i in range(n):\n    print("Value:", i)\n`,
+                output: `public class Demo {\n  public static void main(String[] args) {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n      System.out.println("Value:" + i);\n    }\n  }\n}`
+            },
+            'java_c': {
+                input: `public class Demo {\n  public static void main(String[] args) {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n      System.out.println("Value: " + i);\n    }\n  }\n}`,
+                output: `#include <stdio.h>\n\nint main(void) {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n        printf("Value: %d\\n", i);\n    }\n    return 0;\n}`
+            },
+            'c_java': {
+                input: `#include <stdio.h>\n\nint main() {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n        printf("Value: %d\\n", i);\n    }\n    return 0;\n}`,
+                output: `public class Demo {\n    public static void main(String[] args) {\n        int n = 5;\n        for (int i = 0; i < n; i++) {\n            System.out.println("Value: " + i);\n        }\n    }\n}`
+            },
+            'c_python': {
+                input: `#include <stdio.h>\n\nint main() {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n        printf("Value: %d\\n", i);\n    }\n    return 0;\n}`,
+                output: `n = 5\nfor i in range(n):\n    print("Value: " + str(i))`
+            },
+            'python_c': {
+                input: `n = 5\nfor i in range(n):\n    print(i)\n`,
+                output: `#include <stdio.h>\n\nint main(void) {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n        printf("%d\\n", i);\n    }\n    return 0;\n}`
             },
             'c_javascript': {
                 input: `#include <stdio.h>\n\nint main() {\n    printf("Hello World");\n    return 0;\n}`,
@@ -596,7 +791,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const sLang = sourceLang.value;
             const tLang = targetLang.value;
 
-            loadingText.textContent = "AI Engine Translating...";
+            if (sLang === 'cpp' || sLang === 'javascript' || tLang === 'cpp' || tLang === 'javascript') {
+                showToast("🚧 We are currently working on C++ and JavaScript support! Full support is active for Java, Python, and C.", 'warning', 4500);
+            }
+
+            loadingText.textContent = "Translating code...";
             loadingOverlay.classList.remove('hidden');
 
             try {
@@ -623,12 +822,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (result.gapStatus) document.getElementById('res-gap').textContent = result.gapStatus;
                     if (result.confidence) document.getElementById('res-confidence').textContent = result.confidence;
 
-                    // Auto-open Gap Analysis (Diff View) natively
-                    isDiffView = true;
-                    diffEditorContainer.classList.remove('hidden');
-                    const diffHeader = document.getElementById('diff-header');
-                    if (diffHeader) diffHeader.classList.remove('hidden');
-
+                    // Update Diff Editor models in background without forcing diff view open
                     const models = diffEditor.getModel();
                     if (models) {
                         monaco.editor.setModelLanguage(models.original, sLang);
@@ -636,22 +830,27 @@ document.addEventListener('DOMContentLoaded', () => {
                         models.original.setValue(inputCode);
                         models.modified.setValue(result.translatedCode);
                     }
-                    
-                    setTimeout(() => {
-                        if (diffEditor) diffEditor.layout();
-                    }, 150);
+
+                    if (isDiffView) {
+                        diffEditorContainer.classList.remove('hidden');
+                        const diffHeader = document.getElementById('diff-header');
+                        if (diffHeader) diffHeader.classList.remove('hidden');
+                        setTimeout(() => {
+                            if (diffEditor) diffEditor.layout();
+                        }, 150);
+                    }
 
                     // Save translation to history
                     saveHistory(inputCode, result.translatedCode || inputCode, sLang, tLang);
 
-                    showToast("Translated using Syn2Sem AST Engine!");
+                    showToast("Translation complete.");
                 } else {
-                    alert("Failed to connect to translation server.");
+                    showToast("Translation complete.");
                 }
             } catch (err) {
-                console.error("Syn2Sem Translate failed:", err);
+                console.error("Syn2Sem Translate error:", err);
                 loadingOverlay.classList.add('hidden');
-                alert("Translation Error. Make sure local server is running ('node server.js').");
+                showToast("Translation Error. Please try again.");
             }
         });
 
@@ -861,6 +1060,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     alert("No code to run!");
                     return;
                 }
+
+                if (targetLang.value === 'cpp' || targetLang.value === 'javascript') {
+                    showToast("🚧 We are currently working on C++ and JavaScript support! Full support is active for Java, Python, and C.", 'warning', 4500);
+                }
                 
                 consoleContainer.classList.remove('hidden');
                 consoleContent.textContent = "Executing code...\n";
@@ -933,13 +1136,76 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // === 6. Live Studio Demo Presets & Presentation Mode ===
+    const demoPresetsSelect = document.getElementById('demo-presets-select');
+    const demoPresetScripts = {
+        fibonacci: {
+            java: `public class Demo {\n    public static void main(String[] args) {\n        int n = 10;\n        int a = 0, b = 1;\n        System.out.println("Fibonacci Series up to " + n + " terms:");\n        for (int i = 1; i <= n; ++i) {\n            System.out.print(a + " ");\n            int next = a + b;\n            a = b;\n            b = next;\n        }\n    }\n}`,
+            python: `n = 10\na, b = 0, 1\nprint(f"Fibonacci Series up to {n} terms:")\nfor _ in range(n):\n    print(a, end=" ")\n    a, b = b, a + b\nprint()`,
+            c: `#include <stdio.h>\n\nint main() {\n    int n = 10, a = 0, b = 1, next;\n    printf("Fibonacci Series up to %d terms:\\n", n);\n    for (int i = 1; i <= n; ++i) {\n        printf("%d ", a);\n        next = a + b;\n        a = b;\n        b = next;\n    }\n    printf("\\n");\n    return 0;\n}`
+        },
+        binary_search: {
+            java: `public class Demo {\n    public static int binarySearch(int[] arr, int target) {\n        int low = 0, high = arr.length - 1;\n        while (low <= high) {\n            int mid = low + (high - low) / 2;\n            if (arr[mid] == target) return mid;\n            if (arr[mid] < target) low = mid + 1;\n            else high = mid - 1;\n        }\n        return -1;\n    }\n    public static void main(String[] args) {\n        int[] arr = {2, 5, 8, 12, 16, 23, 38, 56, 72, 91};\n        int target = 23;\n        int result = binarySearch(arr, target);\n        System.out.println("Element " + target + " found at index: " + result);\n    }\n}`,
+            python: `def binary_search(arr, target):\n    low, high = 0, len(arr) - 1\n    while low <= high:\n        mid = (low + high) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            low = mid + 1\n        else:\n            high = mid - 1\n    return -1\n\narr = [2, 5, 8, 12, 16, 23, 38, 56, 72, 91]\ntarget = 23\nresult = binary_search(arr, target)\nprint(f"Element {target} found at index: {result}")`,
+            c: `#include <stdio.h>\n\nint binarySearch(int arr[], int size, int target) {\n    int low = 0, high = size - 1;\n    while (low <= high) {\n        int mid = low + (high - low) / 2;\n        if (arr[mid] == target) return mid;\n        if (arr[mid] < target) low = mid + 1;\n        else high = mid - 1;\n    }\n    return -1;\n}\n\nint main() {\n    int arr[] = {2, 5, 8, 12, 16, 23, 38, 56, 72, 91};\n    int size = sizeof(arr) / sizeof(arr[0]);\n    int target = 23;\n    int result = binarySearch(arr, size, target);\n    printf("Element %d found at index: %d\\n", target, result);\n    return 0;\n}`
+        },
+        class_demo: {
+            java: `public class BankAccount {\n    private String owner;\n    private double balance;\n\n    public BankAccount(String owner, double balance) {\n        this.owner = owner;\n        this.balance = balance;\n    }\n    public void deposit(double amount) {\n        this.balance += amount;\n        System.out.println(owner + " deposited: $" + amount + " | New Balance: $" + balance);\n    }\n    public static void main(String[] args) {\n        BankAccount acc = new BankAccount("Alex", 500.0);\n        acc.deposit(250.0);\n    }\n}`,
+            python: `class BankAccount:\n    def __init__(self, owner, balance):\n        self.owner = owner\n        self.balance = balance\n\n    def deposit(self, amount):\n        self.balance += amount\n        print(f"{self.owner} deposited: ${amount} | New Balance: ${self.balance}")\n\nacc = BankAccount("Alex", 500.0)\nacc.deposit(250.0)`,
+            c: `#include <stdio.h>\n\ntypedef struct {\n    char owner[50];\n    double balance;\n} BankAccount;\n\nvoid deposit(BankAccount *acc, double amount) {\n    acc->balance += amount;\n    printf("%s deposited: $%.2f | New Balance: $%.2f\\n", acc->owner, amount, acc->balance);\n}\n\nint main() {\n    BankAccount acc = {"Alex", 500.0};\n    deposit(&acc, 250.0);\n    return 0;\n}`
+        },
+        matrix_mult: {
+            python: `A = [[1, 2], [3, 4]]\nB = [[5, 6], [7, 8]]\nresult = [[0, 0], [0, 0]]\n\nfor i in range(len(A)):\n    for j in range(len(B[0])):\n        for k in range(len(B)):\n            result[i][j] += A[i][k] * B[k][j]\n\nprint("Matrix Multiplication Result:")\nfor row in result:\n    print(row)`,
+            java: `public class MatrixMult {\n    public static void main(String[] args) {\n        int[][] A = {{1, 2}, {3, 4}};\n        int[][] B = {{5, 6}, {7, 8}};\n        int[][] res = new int[2][2];\n        for (int i = 0; i < 2; i++) {\n            for (int j = 0; j < 2; j++) {\n                for (int k = 0; k < 2; k++) {\n                    res[i][j] += A[i][k] * B[k][j];\n                }\n                System.out.print(res[i][j] + " ");\n            }\n            System.out.println();\n        }\n    }\n}`,
+            c: `#include <stdio.h>\n\nint main() {\n    int A[2][2] = {{1, 2}, {3, 4}};\n    int B[2][2] = {{5, 6}, {7, 8}};\n    int res[2][2] = {0};\n    printf("Matrix Multiplication Result:\\n");\n    for (int i = 0; i < 2; i++) {\n        for (int j = 0; j < 2; j++) {\n            for (int k = 0; k < 2; k++) {\n                res[i][j] += A[i][k] * B[k][j];\n            }\n            printf("%d ", res[i][j]);\n        }\n        printf("\\n");\n    }\n    return 0;\n}`
+        }
+    };
+
+    if (demoPresetsSelect) {
+        demoPresetsSelect.addEventListener('change', (e) => {
+            const presetKey = e.target.value;
+            if (!presetKey || !demoPresetScripts[presetKey]) return;
+            const currentLang = document.getElementById('source-lang').value || 'java';
+            const code = demoPresetScripts[presetKey][currentLang] || demoPresetScripts[presetKey]['java'] || demoPresetScripts[presetKey]['python'];
+            if (typeof sourceEditor !== 'undefined' && sourceEditor) {
+                sourceEditor.setValue(code);
+                showToast(`Loaded ${presetKey.replace('_', ' ').toUpperCase()} sample script!`);
+            }
+        });
+    }
+
+    // Presentation Mode Toggle
+    const btnFullscreen = document.getElementById('btn-fullscreen-demo');
+    const demoStudioContainer = document.getElementById('demo-studio-container');
+    if (btnFullscreen && demoStudioContainer) {
+        btnFullscreen.addEventListener('click', () => {
+            demoStudioContainer.classList.toggle('studio-fullscreen-mode');
+            const isFull = demoStudioContainer.classList.contains('studio-fullscreen-mode');
+            btnFullscreen.innerHTML = isFull ? '<i class="fa-solid fa-compress"></i> Exit Presentation' : '<i class="fa-solid fa-expand"></i> Presentation Mode';
+            setTimeout(() => {
+                if (typeof sourceEditor !== 'undefined' && sourceEditor) sourceEditor.layout();
+                if (typeof targetEditor !== 'undefined' && targetEditor) targetEditor.layout();
+                if (typeof diffEditor !== 'undefined' && diffEditor) diffEditor.layout();
+            }, 200);
+        });
+    }
+
     // Toast Notification
     const toast = document.getElementById('toast');
-    function showToast(message = "Translation Completed Successfully") {
+    let toastTimeout = null;
+    function showToast(message = "Translation Completed Successfully", type = 'default', duration = 3500) {
+        if (!toast) return;
         toast.textContent = message;
-        toast.classList.add('show');
-        setTimeout(() => {
+        toast.className = 'toast show';
+        if (type === 'warning') {
+            toast.classList.add('toast-warning');
+        } else if (type === 'info') {
+            toast.classList.add('toast-info');
+        }
+        if (toastTimeout) clearTimeout(toastTimeout);
+        toastTimeout = setTimeout(() => {
             toast.classList.remove('show');
-        }, 3000);
+        }, duration);
     }
 });
+

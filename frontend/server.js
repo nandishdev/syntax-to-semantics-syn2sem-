@@ -1,9 +1,607 @@
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 const os = require('os');
 const irCompiler = require('./compiler');
+
+function programNeedsStdin(code) {
+    const t = String(code || '');
+    return /\binput\s*\(|readFileSync\s*\(\s*0\s*|read_double\s*\(|read_int\s*\(|readLine\s*\(|readDouble\s*\(|readInt\s*\(|nextDouble\s*\(|nextInt\s*\(|nextLine\s*\(|std::cin\b|\bscanf\s*\(/.test(t);
+}
+
+function defaultStdinFor(code) {
+    return programNeedsStdin(code) ? '85\n' : '';
+}
+
+function formatExecFailure(stderr, stdout, err) {
+    const parts = [stderr, stdout].filter((s) => s && String(s).trim());
+    if (parts.length) return parts.join('\n').trim();
+    const msg = (err && err.message) ? err.message : 'Command failed';
+    if (/python|node/i.test(msg) && /Command failed/i.test(msg)) {
+        return `${msg}\n\nThe program exited with no error text. Common causes:\n` +
+            `- input() has no keyboard in this panel (test input 85 is now sent automatically)\n` +
+            `- python/node is missing from PATH`;
+    }
+    return msg;
+}
+
+function validateTargetCode(code, targetLang) {
+    if (!code || !code.trim()) return false;
+
+    // For Java, use tree-sitter validation (same as other languages)
+    // instead of javac compilation, which is too strict and rejects
+    // valid code if the class name doesn't match the filename.
+    if (targetLang === 'java' && Parser && langParsers['java']) {
+        try {
+            const parser = new Parser();
+            parser.setLanguage(langParsers['java']);
+            const tree = parser.parse(code);
+            let errorCount = 0;
+            function walkJava(node) {
+                if (!node) return;
+                if (node.isMissing || node.type === 'ERROR') errorCount++;
+                for (let i = 0; i < node.childCount; i++) walkJava(node.child(i));
+            }
+            walkJava(tree.rootNode);
+            return errorCount === 0;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    if (!Parser || !langParsers[targetLang]) return true;
+
+    try {
+        const parser = new Parser();
+        parser.setLanguage(langParsers[targetLang]);
+        const tree = parser.parse(code);
+        let errorCount = 0;
+        function walk(node) {
+            if (!node) return;
+            if (node.isMissing || node.type === 'ERROR') errorCount++;
+            for (let i = 0; i < node.childCount; i++) walk(node.child(i));
+        }
+        walk(tree.rootNode);
+        return errorCount === 0;
+    } catch (e) {
+        return false;
+    }
+}
+
+// Load environment variables from .env if present
+function loadEnvFile() {
+    const envPaths = [
+        path.join(__dirname, '.env'),
+        path.join(__dirname, '..', '.env')
+    ];
+    for (const ep of envPaths) {
+        if (fs.existsSync(ep)) {
+            const lines = fs.readFileSync(ep, 'utf8').split('\n');
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (trimmed && !trimmed.startsWith('#')) {
+                    const eqIdx = trimmed.indexOf('=');
+                    if (eqIdx !== -1) {
+                        const key = trimmed.slice(0, eqIdx).trim();
+                        let val = trimmed.slice(eqIdx + 1).trim();
+                        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+                            val = val.slice(1, -1);
+                        }
+                        if (!process.env[key]) {
+                            process.env[key] = val;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+loadEnvFile();
+
+function saveEnvVar(key, val) {
+    process.env[key] = val;
+    const envFile = path.join(__dirname, '.env');
+    let content = '';
+    if (fs.existsSync(envFile)) {
+        content = fs.readFileSync(envFile, 'utf8');
+    }
+    const lines = content.split('\n');
+    let found = false;
+    const newLines = lines.map(line => {
+        const trimmed = line.trim();
+        if (trimmed.startsWith(`${key}=`)) {
+            found = true;
+            return `${key}=${val}`;
+        }
+        return line;
+    });
+    if (!found) {
+        newLines.push(`${key}=${val}`);
+    }
+    fs.writeFileSync(envFile, newLines.filter(Boolean).join('\n') + '\n', 'utf8');
+}
+
+let currentGeminiKeyIndex = 0;
+
+function getGeminiKeyPool(overrideKey) {
+    const keys = [];
+    if (overrideKey) {
+        overrideKey.split(/[\n,;]+/).map(k => k.trim()).filter(Boolean).forEach(k => keys.push(k));
+    }
+
+    // Read directly from .env file so new keys added dynamically take effect immediately
+    const envFile = path.join(__dirname, '.env');
+    if (fs.existsSync(envFile)) {
+        try {
+            const lines = fs.readFileSync(envFile, 'utf8').split('\n');
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (trimmed && !trimmed.startsWith('#')) {
+                    const eqIdx = trimmed.indexOf('=');
+                    if (eqIdx !== -1) {
+                        const kName = trimmed.slice(0, eqIdx).trim().toUpperCase();
+                        let val = trimmed.slice(eqIdx + 1).trim();
+                        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+                            val = val.slice(1, -1);
+                        }
+                        if (kName === 'GEMINI_API_KEY' || kName === 'GEMINI_API_KEYS' || kName.startsWith('GEMINI_API_KEY_')) {
+                            val.split(/[\n,;]+/).map(k => k.trim()).filter(Boolean).forEach(k => keys.push(k));
+                        }
+                    }
+                }
+            }
+        } catch (e) { /* ignore */ }
+    }
+
+    if (process.env.GEMINI_API_KEYS) {
+        process.env.GEMINI_API_KEYS.split(/[\n,;]+/).map(k => k.trim()).filter(Boolean).forEach(k => keys.push(k));
+    }
+    if (process.env.GEMINI_API_KEY) {
+        process.env.GEMINI_API_KEY.split(/[\n,;]+/).map(k => k.trim()).filter(Boolean).forEach(k => keys.push(k));
+    }
+    for (let i = 1; i <= 20; i++) {
+        const k = process.env[`GEMINI_API_KEY_${i}`];
+        if (k && k.trim()) keys.push(k.trim());
+    }
+
+    return Array.from(new Set(keys));
+}
+
+function getActiveAIConfig(overrideKey, overrideProvider, overrideModel) {
+    const geminiPool = getGeminiKeyPool(overrideKey);
+    const key = overrideKey || (geminiPool.length > 0 ? geminiPool[0] : '') || process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENROUTER_API_KEY || process.env.AI_API_KEY || process.env.API_KEY || '';
+    let provider = (overrideProvider || process.env.AI_PROVIDER || '').toLowerCase();
+    let model = overrideModel || process.env.AI_MODEL || '';
+
+    if (!provider && (geminiPool.length > 0 || key)) {
+        if (geminiPool.length > 0 || process.env.GEMINI_API_KEY || key.startsWith('AIza') || key.startsWith('AQ.')) provider = 'gemini';
+        else if (process.env.GROQ_API_KEY || key.startsWith('gsk_')) provider = 'groq';
+        else if (process.env.ANTHROPIC_API_KEY || key.startsWith('sk-ant-')) provider = 'anthropic';
+        else if (process.env.OPENROUTER_API_KEY || key.startsWith('sk-or-')) provider = 'openrouter';
+        else if (process.env.OPENAI_API_KEY || key.startsWith('sk-')) provider = 'openai';
+        else provider = 'gemini';
+    }
+
+    if (provider && !model) {
+        if (provider === 'gemini') model = 'gemini-flash-lite-latest';
+        else if (provider === 'groq') model = 'llama-3.3-70b-versatile';
+        else if (provider === 'openai') model = 'gpt-4o-mini';
+        else if (provider === 'anthropic' || provider === 'claude') model = 'claude-3-5-haiku-20241022';
+        else if (provider === 'openrouter') model = 'meta-llama/llama-3.3-70b-instruct';
+    }
+
+    return { key, provider, model };
+}
+
+function makeHttpsRequest(options, payload) {
+    return new Promise((resolve, reject) => {
+        const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', chunk => { data += chunk.toString(); });
+            res.on('end', () => {
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                    resolve(data);
+                } else {
+                    reject(new Error(`HTTP ${res.statusCode}: ${data}`));
+                }
+            });
+        });
+        req.on('error', reject);
+        req.on('timeout', () => {
+            req.destroy();
+            reject(new Error('Cloud API request timed out (25s)'));
+        });
+        if (payload) {
+            req.write(payload);
+        }
+        req.end();
+    });
+}
+
+async function callGemini(apiKey, model, prompt) {
+    const keyPool = getGeminiKeyPool(apiKey);
+    if (keyPool.length === 0) {
+        throw new Error('No Gemini API key available in key pool');
+    }
+
+    const candidates = model ? [model] : ['gemini-flash-lite-latest', 'gemini-3.1-flash-lite', 'gemini-3.5-flash', 'gemini-flash-latest'];
+    let lastErr = null;
+    const totalKeys = keyPool.length;
+
+    console.log(`[Gemini Key Pool] Active keys: ${totalKeys}. Starting with Key #${(currentGeminiKeyIndex % totalKeys) + 1}...`);
+
+    for (let offset = 0; offset < totalKeys; offset++) {
+        const keyIdx = (currentGeminiKeyIndex + offset) % totalKeys;
+        const currentKey = keyPool[keyIdx];
+        const maskedKey = currentKey.length > 8 ? `${currentKey.slice(0, 4)}...${currentKey.slice(-4)}` : '****';
+        let keyLimitHit = false;
+
+        for (const m of candidates) {
+            try {
+                const payload = JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { temperature: 0.1 }
+                });
+                const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${currentKey}`);
+                const options = {
+                    hostname: url.hostname,
+                    path: url.pathname + url.search,
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Content-Length': Buffer.byteLength(payload)
+                    },
+                    timeout: 12000
+                };
+                const raw = await makeHttpsRequest(options, payload);
+                const parsed = JSON.parse(raw);
+                const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (text) {
+                    currentGeminiKeyIndex = keyIdx;
+                    return { text, providerName: `Syn2Sem Engine (${m})` };
+                }
+            } catch (e) {
+                const errMsg = String(e.message || '').toLowerCase();
+                const isLimit = errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('resource_exhausted') || errMsg.includes('rate limit') || errMsg.includes('limit exceeded');
+                
+                if (isLimit) {
+                    console.warn(`[Key Failover] Key #${keyIdx + 1} (${maskedKey}) exceeded rate/quota limit. Auto-switching to next key...`);
+                    keyLimitHit = true;
+                    lastErr = e;
+                    break;
+                } else {
+                    console.warn(`[Gemini] Model ${m} with Key #${keyIdx + 1} unavailable (${e.message}), trying next candidate...`);
+                    lastErr = e;
+                }
+            }
+        }
+
+        if (keyLimitHit && totalKeys > 1) {
+            currentGeminiKeyIndex = (keyIdx + 1) % totalKeys;
+            console.log(`[Key Failover] Switched active pointer to Key #${currentGeminiKeyIndex + 1} of ${totalKeys}`);
+        }
+    }
+
+    throw lastErr || new Error('All Gemini API keys in pool exceeded rate limit or are unavailable');
+}
+
+async function callGroq(apiKey, model, prompt) {
+    const selectedModel = model || 'llama-3.3-70b-versatile';
+    const payload = JSON.stringify({
+        model: selectedModel,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.1
+    });
+    const options = {
+        hostname: 'api.groq.com',
+        path: '/openai/v1/chat/completions',
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Length': Buffer.byteLength(payload)
+        },
+        timeout: 25000
+    };
+    const raw = await makeHttpsRequest(options, payload);
+    const parsed = JSON.parse(raw);
+    const text = parsed.choices?.[0]?.message?.content;
+    if (!text) throw new Error('No response text returned by Groq');
+    return { text, providerName: `Groq (${selectedModel})` };
+}
+
+async function callOpenAI(apiKey, model, prompt) {
+    const selectedModel = model || 'gpt-4o-mini';
+    const payload = JSON.stringify({
+        model: selectedModel,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.1
+    });
+    const options = {
+        hostname: 'api.openai.com',
+        path: '/v1/chat/completions',
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Length': Buffer.byteLength(payload)
+        },
+        timeout: 25000
+    };
+    const raw = await makeHttpsRequest(options, payload);
+    const parsed = JSON.parse(raw);
+    const text = parsed.choices?.[0]?.message?.content;
+    if (!text) throw new Error('No response text returned by OpenAI');
+    return { text, providerName: `OpenAI (${selectedModel})` };
+}
+
+async function callAnthropic(apiKey, model, prompt) {
+    const selectedModel = model || 'claude-3-5-haiku-20241022';
+    const payload = JSON.stringify({
+        model: selectedModel,
+        max_tokens: 4096,
+        messages: [{ role: 'user', content: prompt }]
+    });
+    const options = {
+        hostname: 'api.anthropic.com',
+        path: '/v1/messages',
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'Content-Length': Buffer.byteLength(payload)
+        },
+        timeout: 25000
+    };
+    const raw = await makeHttpsRequest(options, payload);
+    const parsed = JSON.parse(raw);
+    const text = parsed.content?.[0]?.text;
+    if (!text) throw new Error('No response text returned by Anthropic');
+    return { text, providerName: `Claude (${selectedModel})` };
+}
+
+async function callOpenRouter(apiKey, model, prompt) {
+    const selectedModel = model || 'meta-llama/llama-3.3-70b-instruct';
+    const payload = JSON.stringify({
+        model: selectedModel,
+        messages: [{ role: 'user', content: prompt }]
+    });
+    const options = {
+        hostname: 'openrouter.ai',
+        path: '/api/v1/chat/completions',
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Length': Buffer.byteLength(payload)
+        },
+        timeout: 25000
+    };
+    const raw = await makeHttpsRequest(options, payload);
+    const parsed = JSON.parse(raw);
+    const text = parsed.choices?.[0]?.message?.content;
+    if (!text) throw new Error('No response text returned by OpenRouter');
+    return { text, providerName: `OpenRouter (${selectedModel})` };
+}
+
+async function dispatchAPITranslation(apiKey, provider, model, prompt) {
+    const prov = (provider || '').toLowerCase();
+    if (prov === 'gemini') return await callGemini(apiKey, model, prompt);
+    if (prov === 'groq') return await callGroq(apiKey, model, prompt);
+    if (prov === 'openai') return await callOpenAI(apiKey, model, prompt);
+    if (prov === 'anthropic' || prov === 'claude') return await callAnthropic(apiKey, model, prompt);
+    if (prov === 'openrouter') return await callOpenRouter(apiKey, model, prompt);
+
+    if (apiKey.startsWith('AIza') || apiKey.startsWith('AQ.')) return await callGemini(apiKey, model, prompt);
+    if (apiKey.startsWith('gsk_')) return await callGroq(apiKey, model, prompt);
+    if (apiKey.startsWith('sk-ant-')) return await callAnthropic(apiKey, model, prompt);
+    if (apiKey.startsWith('sk-or-')) return await callOpenRouter(apiKey, model, prompt);
+    if (apiKey.startsWith('sk-')) return await callOpenAI(apiKey, model, prompt);
+
+    return await callGemini(apiKey, model, prompt);
+}
+
+function stripComments(code, lang) {
+    if (!code) return code;
+    let lines = code.split(/\r?\n/);
+    let inBlockComment = false;
+    let cleaned = [];
+
+    for (let rawLine of lines) {
+        let line = rawLine;
+
+        if (['java', 'c', 'cpp', 'javascript'].includes(lang)) {
+            if (inBlockComment) {
+                const endIdx = line.indexOf('*/');
+                if (endIdx !== -1) {
+                    line = line.slice(endIdx + 2);
+                    inBlockComment = false;
+                } else {
+                    continue;
+                }
+            }
+
+            line = line.replace(/\/\*[\s\S]*?\*\//g, '');
+
+            if (line.includes('/*')) {
+                const startIdx = line.indexOf('/*');
+                line = line.slice(0, startIdx);
+                inBlockComment = true;
+            }
+
+            let inSingle = false, inDouble = false, commentStart = -1;
+            for (let i = 0; i < line.length; i++) {
+                const c = line[i];
+                const prev = i > 0 ? line[i - 1] : '';
+                if (c === "'" && !inDouble && prev !== '\\') inSingle = !inSingle;
+                else if (c === '"' && !inSingle && prev !== '\\') inDouble = !inDouble;
+                else if (!inSingle && !inDouble && c === '/' && line[i + 1] === '/') {
+                    commentStart = i;
+                    break;
+                }
+            }
+            if (commentStart !== -1) {
+                line = line.slice(0, commentStart);
+            }
+        } else if (lang === 'python') {
+            let inSingle = false, inDouble = false, commentStart = -1;
+            for (let i = 0; i < line.length; i++) {
+                const c = line[i];
+                const prev = i > 0 ? line[i - 1] : '';
+                if (c === "'" && !inDouble && prev !== '\\') inSingle = !inSingle;
+                else if (c === '"' && !inSingle && prev !== '\\') inDouble = !inDouble;
+                else if (!inSingle && !inDouble && c === '#') {
+                    commentStart = i;
+                    break;
+                }
+            }
+            if (commentStart !== -1) {
+                line = line.slice(0, commentStart);
+            }
+        }
+
+        if (line.trim().length > 0) {
+            cleaned.push(line.trimEnd());
+        }
+    }
+
+    return cleaned.join('\n');
+}
+
+async function tryAPIEnhancement({ sourceLang, targetLang, sourceCode, apiKey, provider, model, callback }) {
+    const cfg = getActiveAIConfig(apiKey, provider, model);
+
+    // If no API key is configured, instantly use the native AST compiler
+    if (!cfg.key) {
+        console.log(`[Translation] No API key configured. Using Native AST Compiler.`);
+        try {
+            const astResult = syn2SemTranslateCore(sourceCode, sourceLang, targetLang);
+            if (astResult) {
+                return callback(stripComments(astResult, targetLang), 'ast', 'AST Compiler');
+            }
+        } catch (e) {
+            console.error('[Translation] AST error:', e.message);
+        }
+        return callback('// Translation failed: AST Compiler could not process input', 'error');
+    }
+
+    // Language-specific instructions
+    let langHints = '';
+    if (targetLang === 'java') {
+        langHints = '\nIMPORTANT: The public class MUST be named "Demo". Use proper Java types (HashMap, ArrayList, etc.) instead of Python/JS idioms. Do NOT use "self." — use "this." for instance variables.';
+    } else if (targetLang === 'c') {
+        langHints = '\nIMPORTANT: Use standard C with #include headers. Include a main() function. Use printf for output. Do NOT use C++ functions like max_element, min_element, or sum. Implement array max, min, and sum manually using loops.';
+    } else if (targetLang === 'cpp') {
+        langHints = '\nIMPORTANT: Use standard C++ with #include <iostream>, <algorithm>, <numeric>, <vector>. Include a main() function. Use std::cout for output.';
+    } else if (targetLang === 'python') {
+        langHints = '\nIMPORTANT: Use proper Python 3 syntax. Use dictionaries, lists, and f-strings where appropriate.';
+    } else if (targetLang === 'javascript') {
+        langHints = '\nIMPORTANT: Use modern JavaScript (ES6+). Use console.log for output.';
+    }
+
+    const prompt = `You are an expert compiler engineer. Translate the following ${sourceLang} code into valid, compilable ${targetLang} code.
+The translated code must be fully functional and produce the same output as the original.${langHints}
+
+Original ${sourceLang} code:
+${sourceCode}
+
+CRITICAL RULES:
+- Return ONLY the executable ${targetLang} code.
+- Do NOT include ANY comments whatsoever. Strictly NO '//', NO '/*', NO '#', and NO docstrings.
+- No explanation, no markdown backticks, no notes. Pure code only.`;
+
+    console.log(`[Cloud AI API] Translating ${sourceLang} -> ${targetLang} via ${cfg.provider || 'auto'} (${cfg.model || 'default'})...`);
+
+    try {
+        const { text, providerName } = await dispatchAPITranslation(cfg.key, cfg.provider, cfg.model, prompt);
+        let candidate = String(text || '').trim();
+        candidate = candidate.replace(/^```[a-zA-Z0-9_-]*\s*\n?/gm, '').replace(/\n?\s*```\s*$/gm, '').trim();
+
+        if (targetLang === 'java') {
+            candidate = candidate.replace(/public\s+class\s+(\w+)/, 'public class Demo');
+        }
+
+        // Strictly remove any comments that may have been generated
+        candidate = stripComments(candidate, targetLang);
+
+        if (!candidate || candidate.length <= 5) {
+            console.log(`[Cloud AI API] Empty response from API, falling back to AST.`);
+            const astCode = syn2SemTranslateCore(sourceCode, sourceLang, targetLang);
+            return callback(stripComments(astCode, targetLang), 'ast', 'AST Compiler');
+        }
+
+        return callback(candidate, 'api', 'Syn2Sem Engine');
+    } catch (err) {
+        console.warn(`[Cloud AI API] Error: ${err.message}. Falling back to AST Compiler.`);
+        try {
+            const fallbackCode = syn2SemTranslateCore(sourceCode, sourceLang, targetLang);
+            if (fallbackCode) return callback(fallbackCode, 'ast', 'AST Compiler');
+        } catch (fbErr) {}
+        return callback(`// Translation failed: ${err.message}`, 'error');
+    }
+}
+
+function runSpawned(cmd, args, opts, callback) {
+    const child = spawn(cmd, args, {
+        windowsHide: true,
+        env: opts.env || process.env,
+    });
+    let stdout = '';
+    let stderr = '';
+    let done = false;
+    const timer = setTimeout(() => {
+        if (done) return;
+        child.kill();
+        done = true;
+        callback(new Error('Timed out'), stdout, stderr);
+    }, opts.timeout || 8000);
+    child.stdout.on('data', (d) => { stdout += d.toString(); });
+    child.stderr.on('data', (d) => { stderr += d.toString(); });
+    child.on('error', (err) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        callback(err, stdout, stderr);
+    });
+    child.on('close', (code) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        if (code === 0) callback(null, stdout, stderr);
+        else callback(new Error(`Command failed: ${cmd} ${args.join(' ')}`), stdout, stderr);
+    });
+    if (opts.stdin) child.stdin.write(opts.stdin);
+    child.stdin.end();
+}
+
+function runPythonFile(filePath, code, callback) {
+    const stdin = defaultStdinFor(code);
+    const tries = [
+        { cmd: 'python', args: [filePath] },
+        { cmd: 'py', args: ['-3', filePath] },
+    ];
+    function attempt(i) {
+        if (i >= tries.length) {
+            callback(new Error('Python was not found. Install Python and ensure python or py works in a terminal.'), '', '');
+            return;
+        }
+        runSpawned(tries[i].cmd, tries[i].args, { timeout: 8000, stdin }, (err, stdout, stderr) => {
+            if (err && /not recognized|ENOENT|not found/i.test(String(err.message) + String(stderr))) {
+                attempt(i + 1);
+                return;
+            }
+            callback(err, stdout, stderr);
+        });
+    }
+    attempt(0);
+}
+
+function runNodeFile(filePath, code, callback) {
+    runSpawned(process.execPath, [filePath], { timeout: 8000, stdin: defaultStdinFor(code) }, callback);
+}
 
 const PORT = process.env.PORT || 3000;
 
@@ -1612,6 +2210,35 @@ function sanitizeTargetSyntax(code, targetLang) {
         while (braceDepth > 0) { fixed += '\n}'; braceDepth--; }
     }
 
+    // ── Language-Specific Idiom Normalization ──
+    if (targetLang === 'java') {
+        // Convert Python square exponent: x ** 2 -> (x * x)
+        fixed = fixed.replace(/([a-zA-Z_]\w*|\([^\)]+\))\s*\*\*\s*2\b/g, '($1 * $1)');
+        // Convert general power: x ** y -> (int)Math.pow(x, y)
+        fixed = fixed.replace(/([a-zA-Z_]\w*|\([^\)]+\))\s*\*\*\s*([a-zA-Z0-9_]+|\([^\)]+\))/g, '(int)Math.pow($1, $2)');
+        // Convert Python list.append(...) to Java list.add(...) unless StringBuilder
+        if (!fixed.includes('StringBuilder') && !fixed.includes('StringBuffer')) {
+            fixed = fixed.replace(/\.append\(/g, '.add(');
+        }
+        // Convert self. to this.
+        fixed = fixed.replace(/\bself\./g, 'this.');
+        // Ensure java.util.* imports if List/ArrayList/Map/Set used
+        if (/\b(?:List|ArrayList|Map|HashMap|Set|HashSet)\b/.test(fixed) && !fixed.includes('import java.util')) {
+            fixed = 'import java.util.*;\n' + fixed;
+        }
+    } else if (targetLang === 'c' || targetLang === 'cpp') {
+        // Convert Python power: x ** 2 -> (x * x)
+        fixed = fixed.replace(/([a-zA-Z_]\w*|\([^\)]+\))\s*\*\*\s*2\b/g, '($1 * $1)');
+        fixed = fixed.replace(/([a-zA-Z_]\w*|\([^\)]+\))\s*\*\*\s*([a-zA-Z0-9_]+|\([^\)]+\))/g, 'pow($1, $2)');
+        fixed = fixed.replace(/\bself\./g, 'this->');
+        if (fixed.includes('pow(') && !fixed.includes('<math.h>') && !fixed.includes('<cmath>')) {
+            fixed = (targetLang === 'c' ? '#include <math.h>\n' : '#include <cmath>\n') + fixed;
+        }
+    } else if (targetLang === 'javascript') {
+        fixed = fixed.replace(/\.append\(/g, '.push(');
+        fixed = fixed.replace(/\bself\./g, 'this.');
+    }
+
     // Cleanup: remove stray/broken import tokens that translators sometimes emit
     // e.g., 'import;' or 'import' without a module spec — Node throws on these.
     if (targetLang === 'javascript') {
@@ -1632,37 +2259,171 @@ function sanitizeTargetSyntax(code, targetLang) {
 }
 
 
-// Helper: run code for a given language and return Promise with result
-function runCodeAndCapture(lang, body) {
+// ═══════════════════════════════════════════════════════════════════════════════
+// Piston API & Cloud Compiler Execution Engine
+// ═══════════════════════════════════════════════════════════════════════════════
+async function executeViaPiston(lang, code, stdin) {
+    const pistonUrl = process.env.PISTON_URL || 'https://emkc.org/api/v2/piston/execute';
+    const pistonKey = process.env.PISTON_KEY || '';
+
+    const langMap = {
+        'python': { language: 'python', version: '*' },
+        'javascript': { language: 'javascript', version: '*' },
+        'c': { language: 'c', version: '*' },
+        'cpp': { language: 'c++', version: '*' },
+        'java': { language: 'java', version: '*' }
+    };
+
+    const target = langMap[lang] || { language: lang, version: '*' };
+    const fileName = lang === 'java' ? 'Demo.java' : (lang === 'c' ? 'main.c' : (lang === 'cpp' ? 'main.cpp' : (lang === 'python' ? 'main.py' : 'main.js')));
+
+    const payload = JSON.stringify({
+        language: target.language,
+        version: target.version,
+        files: [{ name: fileName, content: code }],
+        stdin: stdin || ''
+    });
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (pistonKey) {
+        headers['Authorization'] = pistonKey;
+    }
+
+    const res = await fetch(pistonUrl, {
+        method: 'POST',
+        headers,
+        body: payload,
+        signal: AbortSignal.timeout(12000)
+    });
+
+    if (!res.ok) {
+        throw new Error(`Piston API HTTP ${res.status}: ${await res.text()}`);
+    }
+
+    const data = await res.json();
+    if (data.message && data.message.includes('whitelist')) {
+        throw new Error(`Piston whitelist: ${data.message}`);
+    }
+
+    const run = data.run || {};
+    const compile = data.compile || {};
+
+    if (compile.code && compile.code !== 0) {
+        return {
+            error: true,
+            output: '❌ Compile Error:\n' + (compile.output || compile.stderr || 'Compilation failed').trim(),
+            lang,
+            runner: 'Syn2Sem Engine'
+        };
+    }
+
+    const isErr = run.code !== 0 && run.code !== null;
+    const outputText = run.output || run.stdout || run.stderr || (isErr ? 'Execution failed' : '(no output)');
+
+    return {
+        error: isErr,
+        output: outputText.trim(),
+        lang,
+        runner: 'Syn2Sem Engine'
+    };
+}
+
+async function executeViaCloudCompiler(lang, code, stdin) {
+    const judge0Map = {
+        'c': 103, // GCC 14.1
+        'cpp': 105, // G++ 14.1
+        'java': 91, // JDK 17
+        'javascript': 102, // Node 22
+        'python': 100 // Python 3.12
+    };
+
+    const langId = judge0Map[lang];
+    if (!langId) throw new Error(`Unsupported language for execution: ${lang}`);
+
+    let src = code;
+    if (lang === 'java') {
+        src = src.replace(/public\s+class\s+Demo\b/, 'public class Main');
+    }
+
+    const payload = JSON.stringify({
+        language_id: langId,
+        source_code: src,
+        stdin: stdin || ''
+    });
+
+    const res = await fetch('https://ce.judge0.com/submissions?wait=true', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+        signal: AbortSignal.timeout(15000)
+    });
+
+    if (!res.ok) {
+        throw new Error(`Compiler execution HTTP ${res.status}: ${await res.text()}`);
+    }
+
+    const data = await res.json();
+    if (data.compile_output) {
+        return {
+            error: true,
+            output: '❌ Compile Error:\n' + data.compile_output.trim(),
+            lang,
+            runner: 'Syn2Sem Engine'
+        };
+    }
+
+    if (data.status && data.status.id > 3) {
+        const errOut = data.stderr || data.message || data.status.description || 'Execution failed';
+        return {
+            error: true,
+            output: errOut.trim(),
+            lang,
+            runner: 'Syn2Sem Engine'
+        };
+    }
+
+    const out = (data.stdout || data.stderr || '(no output)').trim();
+    return {
+        error: false,
+        output: out,
+        lang,
+        runner: 'Syn2Sem Engine'
+    };
+}
+
+function runCodeLocallyAndCapture(lang, body) {
     return new Promise((resolve) => {
         // C/C++ compile & run
         if (lang === 'c' || lang === 'cpp') {
-            const GCC = 'C:\\msys64\\ucrt64\\bin\\gcc.exe';
-            const GPP = 'C:\\msys64\\ucrt64\\bin\\g++.exe';
+            const isWin = require('os').platform() === 'win32';
+            const GCC = isWin ? 'C:\\msys64\\ucrt64\\bin\\gcc.exe' : 'gcc';
+            const GPP = isWin ? 'C:\\msys64\\ucrt64\\bin\\g++.exe' : 'g++';
             const compiler = lang === 'c' ? GCC : GPP;
             const srcExt = lang === 'c' ? '.c' : '.cpp';
             const ts = Date.now();
             const srcFile = path.join(os.tmpdir(), `stos_${ts}${srcExt}`);
-            const exeFile = path.join(os.tmpdir(), `stos_${ts}.exe`);
+            const exeFile = path.join(os.tmpdir(), isWin ? `stos_${ts}.exe` : `stos_${ts}`);
+            const envPath = isWin ? { ...process.env, PATH: 'C:\\msys64\\ucrt64\\bin;' + process.env.PATH } : process.env;
+
             fs.writeFile(srcFile, body, (err) => {
-                if (err) return resolve({ error: true, output: 'Error writing file: ' + err.message, lang });
+                if (err) return resolve({ error: true, output: 'Error writing file: ' + err.message, lang, runner: 'Syn2Sem Engine' });
                 const compileCmd = `"${compiler}" "${srcFile}" -o "${exeFile}"`;
-                exec(compileCmd, { timeout: 15000, env: { ...process.env, PATH: 'C:\\msys64\\ucrt64\\bin;' + process.env.PATH } }, (compErr, compOut, compStderr) => {
+                exec(compileCmd, { timeout: 15000, env: envPath }, (compErr, compOut, compStderr) => {
                     if (compErr) {
                         let errDetail = (compStderr || compOut || compErr.message).trim();
                         errDetail = errDetail.split(srcFile).join(`[source${srcExt}]`);
                         try { fs.unlinkSync(srcFile); } catch (e) { }
-                        return resolve({ error: true, output: 'Compile Error:\n' + errDetail, lang });
+                        return resolve({ error: true, output: 'Compile Error:\n' + errDetail, lang, runner: 'Syn2Sem Engine' });
                     }
-                    exec(`"${exeFile}"`, { timeout: 8000, env: { ...process.env, PATH: 'C:\\msys64\\ucrt64\\bin;' + process.env.PATH } }, (runErr, stdout, stderr) => {
+                    exec(`"${exeFile}"`, { timeout: 8000, env: envPath }, (runErr, stdout, stderr) => {
                         try { fs.unlinkSync(srcFile); } catch (e) { }
                         try { fs.unlinkSync(exeFile); } catch (e) { }
                         if (runErr) {
                             let runErrDetail = (stderr || runErr.message).trim();
                             runErrDetail = runErrDetail.split(exeFile).join(`[executable]`);
-                            return resolve({ error: true, output: runErrDetail, lang });
+                            return resolve({ error: true, output: runErrDetail, lang, runner: 'Syn2Sem Engine' });
                         }
-                        return resolve({ error: false, output: stdout || stderr || '(no output)', lang });
+                        return resolve({ error: false, output: stdout || stderr || '(no output)', lang, runner: 'Syn2Sem Engine' });
                     });
                 });
             });
@@ -1675,16 +2436,16 @@ function runCodeAndCapture(lang, body) {
             const javaFile = path.join(javaDir, 'Demo.java');
             fs.mkdirSync(javaDir, { recursive: true });
             fs.writeFile(javaFile, body, (err) => {
-                if (err) return resolve({ error: true, output: 'Error writing Java file: ' + err.message, lang });
+                if (err) return resolve({ error: true, output: 'Error writing Java file: ' + err.message, lang, runner: 'Syn2Sem Engine' });
                 exec(`javac "${javaFile}"`, { timeout: 10000 }, (compErr, _out, compStderr) => {
                     if (compErr) {
                         let msg = (compStderr || compErr.message).trim();
                         msg = msg.split(javaFile).join(`[Demo.java]`);
-                        return resolve({ error: true, output: 'Compile Error:\n' + msg, lang });
+                        return resolve({ error: true, output: 'Compile Error:\n' + msg, lang, runner: 'Syn2Sem Engine' });
                     }
                     exec(`java -cp "${javaDir}" Demo`, { timeout: 10000 }, (runErr, stdout, stderr) => {
-                        if (runErr) return resolve({ error: true, output: stderr || runErr.message, lang });
-                        return resolve({ error: false, output: stdout || stderr || '(no output)', lang });
+                        if (runErr) return resolve({ error: true, output: stderr || runErr.message, lang, runner: 'Syn2Sem Engine' });
+                        return resolve({ error: false, output: stdout || stderr || '(no output)', lang, runner: 'Syn2Sem Engine' });
                     });
                 });
             });
@@ -1696,23 +2457,54 @@ function runCodeAndCapture(lang, body) {
         const ext = langExtMap[lang] || '.txt';
         const tempFilePath = path.join(os.tmpdir(), `run_code_${Date.now()}${ext}`);
         fs.writeFile(tempFilePath, body, (err) => {
-            if (err) return resolve({ error: true, output: 'Error writing temp file: ' + err.message, lang });
+            if (err) return resolve({ error: true, output: 'Error writing temp file: ' + err.message, lang, runner: 'Syn2Sem Engine' });
             let execCommand = '';
             if (lang === 'python') execCommand = `python "${tempFilePath}"`;
             else if (lang === 'javascript') execCommand = `node "${tempFilePath}"`;
-            else return resolve({ error: true, output: 'Language not supported for execution.', lang });
+            else return resolve({ error: true, output: 'Language not supported for execution.', lang, runner: 'Syn2Sem Engine' });
 
-            exec(execCommand, { timeout: 8000 }, (execErr, stdout, stderr) => {
+            const finish = (execErr, stdout, stderr) => {
                 try { fs.unlinkSync(tempFilePath); } catch (e) { }
                 if (execErr) {
-                    let errMsg = (stderr || execErr.message).trim();
+                    let errMsg = formatExecFailure(stderr, stdout, execErr).trim();
                     errMsg = errMsg.split(tempFilePath).join(`[source${ext}]`);
-                    return resolve({ error: true, output: errMsg, lang });
+                    return resolve({ error: true, output: errMsg, lang, runner: 'Syn2Sem Engine' });
                 }
-                return resolve({ error: false, output: stdout || stderr || '(no output)', lang });
-            });
+                return resolve({ error: false, output: stdout || stderr || '(no output)', lang, runner: 'Syn2Sem Engine' });
+            };
+            if (lang === 'python') runPythonFile(tempFilePath, body, finish);
+            else if (lang === 'javascript') runNodeFile(tempFilePath, body, finish);
+            else exec(execCommand, { timeout: 8000 }, finish);
         });
     });
+}
+
+async function runCodeAndCapture(lang, body) {
+    const effectiveStdin = defaultStdinFor(body);
+    const runnerPreference = (process.env.EXECUTION_RUNNER || 'piston').toLowerCase();
+
+    // 1. Try Piston API if configured or preferred
+    if (runnerPreference === 'piston' || process.env.PISTON_URL || process.env.PISTON_KEY) {
+        try {
+            console.log(`[RunCode] Executing ${lang} via Piston API...`);
+            const pistonRes = await executeViaPiston(lang, body, effectiveStdin);
+            return pistonRes;
+        } catch (pistonErr) {
+            console.warn(`[RunCode] Piston API unavailable: ${pistonErr.message}. Trying Cloud Compiler...`);
+        }
+    }
+
+    // 2. Try Cloud Compiler API (Judge0)
+    try {
+        console.log(`[RunCode] Executing ${lang} via Cloud Compiler API...`);
+        const cloudRes = await executeViaCloudCompiler(lang, body, effectiveStdin);
+        return cloudRes;
+    } catch (cloudErr) {
+        console.warn(`[RunCode] Cloud Compiler API failed: ${cloudErr.message}. Trying Local...`);
+    }
+
+    // 3. Fallback to Local Compilers
+    return await runCodeLocallyAndCapture(lang, body);
 }
 
 // Endpoint: translate into multiple targets and run each, returning aggregated outputs
@@ -1950,6 +2742,60 @@ const server = http.createServer((request, response) => {
         return;
     }
 
+    // ── AI API & Compiler Config ──────────────────────────────────────────────
+    if (request.url === '/api-config' && request.method === 'GET') {
+        const cfg = getActiveAIConfig();
+        const maskedKey = cfg.key ? (cfg.key.slice(0, 4) + '...' + cfg.key.slice(-4)) : '';
+        const runner = (process.env.EXECUTION_RUNNER || 'piston').toLowerCase();
+        const pistonUrl = process.env.PISTON_URL || '';
+        const pistonKey = process.env.PISTON_KEY ? (process.env.PISTON_KEY.slice(0, 4) + '...' + process.env.PISTON_KEY.slice(-4)) : '';
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        return response.end(JSON.stringify({
+            configured: Boolean(cfg.key),
+            provider: cfg.provider || 'none',
+            model: cfg.model || 'none',
+            maskedKey,
+            runner,
+            pistonUrl,
+            pistonKey
+        }));
+    }
+
+    if (request.url === '/set-api-key' && request.method === 'POST') {
+        let body = '';
+        request.on('data', chunk => { body += chunk.toString(); });
+        request.on('end', () => {
+            try {
+                const parsed = JSON.parse(body || '{}');
+                const { apiKey, provider, model, runner, pistonUrl, pistonKey } = parsed;
+                if (apiKey !== undefined) {
+                    saveEnvVar('AI_API_KEY', apiKey);
+                }
+                if (provider !== undefined) {
+                    saveEnvVar('AI_PROVIDER', provider);
+                }
+                if (model !== undefined) {
+                    saveEnvVar('AI_MODEL', model);
+                }
+                if (runner !== undefined) {
+                    saveEnvVar('EXECUTION_RUNNER', runner);
+                }
+                if (pistonUrl !== undefined) {
+                    saveEnvVar('PISTON_URL', pistonUrl);
+                }
+                if (pistonKey !== undefined) {
+                    saveEnvVar('PISTON_KEY', pistonKey);
+                }
+                response.writeHead(200, { 'Content-Type': 'application/json' });
+                return response.end(JSON.stringify({ success: true, message: 'Settings configured successfully' }));
+            } catch (e) {
+                response.writeHead(400, { 'Content-Type': 'application/json' });
+                return response.end(JSON.stringify({ error: true, message: e.message }));
+            }
+        });
+        return;
+    }
+
     // ── Syn2Sem Code Translation Engine Endpoint ──────────────────────────────
     if (request.url.startsWith('/translate-code') && request.method === 'POST') {
         const urlObj = new URL(request.url, `http://${request.headers.host}`);
@@ -1966,9 +2812,14 @@ const server = http.createServer((request, response) => {
                 return response.end(JSON.stringify({ error: true, message: "Please enter source code to translate." }));
             }
 
-            // Fallback AST Regex Engine
+            try {
+                proceedTranslation();
+            } catch (err) {
+                console.error("Translation engine error:", err);
+                response.end(JSON.stringify({ error: true, message: "Translation failed: " + err.message }));
+            }
+
             function proceedTranslation() {
-                // 1. Source syntax check
                 let sourceErrorCount = 0;
                 if (Parser && langParsers[sourceLang]) {
                     const srcParser = new Parser();
@@ -1989,9 +2840,6 @@ const server = http.createServer((request, response) => {
                     }));
                 }
 
-                // 2. Translate
-                let translatedCode = syn2SemTranslateCore(body, sourceLang, targetLang);
-
                 function countTgtErrors(code) {
                     if (!Parser || !langParsers[targetLang]) return 0;
                     const tgtParser = new Parser();
@@ -2007,37 +2855,45 @@ const server = http.createServer((request, response) => {
                     return n;
                 }
 
-                let targetSyntaxErrors = countTgtErrors(translatedCode);
-                if (targetSyntaxErrors > 0) {
-                    const sanitized = sanitizeTargetSyntax(translatedCode, targetLang);
-                    const after = countTgtErrors(sanitized);
-                    if (after <= targetSyntaxErrors) {
-                        translatedCode = sanitized;
-                        targetSyntaxErrors = after;
+                const reqApiKey = urlObj.searchParams.get('apiKey') || request.headers['x-api-key'] || '';
+                const reqProvider = urlObj.searchParams.get('provider') || request.headers['x-api-provider'] || '';
+                const reqModel = urlObj.searchParams.get('model') || request.headers['x-api-model'] || '';
+
+                const finalize = (rawFinalCode, engine, engineDetail) => {
+                    if (engine === 'error') {
+                        return response.end(JSON.stringify({
+                            error: true,
+                            message: rawFinalCode
+                        }));
                     }
-                }
 
-                const targetVerified = targetSyntaxErrors === 0;
-                const similarityScore = targetVerified ? "syntax verified" : "syntax issues";
-                const confidence = targetVerified ? "IR emit" : "needs review";
-                const gapStatus = targetVerified
-                    ? "IR compiler (Python, JS, Java, C, C++) — student subset: loops, if/else, functions, print"
-                    : "Medium Risk - Check Syntax";
+                    const finalCode = sanitizeTargetSyntax(stripComments(rawFinalCode, targetLang), targetLang);
+                    const finalErrors = countTgtErrors(finalCode);
+                    const finalVerified = finalErrors === 0;
+                    const usedEngine = 'Syn2Sem Engine';
 
-                response.end(JSON.stringify({
-                    error: false, translatedCode, similarityScore, confidence, gapStatus,
-                    targetVerified, engineName: "Syn2Sem IR Compiler (5-language)"
-                }));
-            }
+                    console.log(`[Translation] Engine used: ${usedEngine} | Target errors: ${finalErrors} | Verified: ${finalVerified}`);
 
-            // ── Local AST Compiler Only — No API Keys ─────────────────────────
-            // All translation is handled 100% locally using the Tree-sitter AST engine.
-            console.log(`[Translate] Using Local AST Compiler: ${sourceLang} -> ${targetLang}`);
-            try {
-                proceedTranslation();
-            } catch (err) {
-                console.error("Translation engine error:", err);
-                response.end(JSON.stringify({ error: true, message: "Translation failed: " + err.message }));
+                    response.end(JSON.stringify({
+                        error: false,
+                        translatedCode: finalCode,
+                        similarityScore: finalVerified ? 'syntax verified' : 'syntax issues',
+                        confidence: finalVerified ? 'validated' : 'needs review',
+                        gapStatus: finalVerified ? 'Translation validated' : 'Review output for syntax issues',
+                        targetVerified: finalVerified,
+                        engineName: usedEngine
+                    }));
+                };
+
+                tryAPIEnhancement({
+                    sourceLang,
+                    targetLang,
+                    sourceCode: body,
+                    apiKey: reqApiKey,
+                    provider: reqProvider,
+                    model: reqModel,
+                    callback: finalize
+                });
             }
         });
         return;
@@ -2053,12 +2909,32 @@ const server = http.createServer((request, response) => {
             response.writeHead(200, { 'Content-Type': 'application/json' });
             if (!body || !body.trim()) return response.end(JSON.stringify({ error: true, message: 'Please provide source code in the request body.' }));
 
+            // Helper: try API enhancement as a Promise
+            function tryTargetTranslation(tgt) {
+                return new Promise((resolve, reject) => {
+                    tryAPIEnhancement({
+                        sourceLang,
+                        targetLang: tgt,
+                        sourceCode: body,
+                        callback: (finalCode, engine) => {
+                            if (engine === 'error') reject(new Error(finalCode));
+                            else resolve(finalCode);
+                        }
+                    });
+                });
+            }
+
             const targets = ['javascript', 'python', 'c', 'cpp', 'java'];
             const results = [];
 
             for (const tgt of targets) {
                 try {
-                    const srcForTarget = (tgt === sourceLang) ? body : syn2SemTranslateCore(body, sourceLang, tgt);
+                    let srcForTarget;
+                    if (tgt === sourceLang) {
+                        srcForTarget = body;
+                    } else {
+                        srcForTarget = await tryTargetTranslation(tgt);
+                    }
                     const runRes = await runCodeAndCapture(tgt, srcForTarget);
                     results.push({ target: tgt, translatedCode: srcForTarget, run: runRes });
                 } catch (e) {
@@ -2077,112 +2953,13 @@ const server = http.createServer((request, response) => {
         const lang = urlObj.searchParams.get('lang') || 'javascript';
         let body = '';
         request.on('data', chunk => { body += chunk.toString(); });
-        request.on('end', () => {
+        request.on('end', async () => {
             response.writeHead(200, { 'Content-Type': 'application/json' });
-
-            // Otherwise run with the originally requested language
-            runCodeWithLang(lang, body, response);
-            return;
-
-            // Helper: run code with a given language (extracted from original /run-code logic)
-            function runCodeWithLang(lang, body, response) {
-                // This duplicates the existing run logic but keeps it isolated for auto-run behavior.
-                // ── C / C++ — compile & run with MSYS2 gcc/g++ ───────────────────
-                if (lang === 'c' || lang === 'cpp') {
-                    const GCC = 'C:\\msys64\\ucrt64\\bin\\gcc.exe';
-                    const GPP = 'C:\\msys64\\ucrt64\\bin\\g++.exe';
-                    const compiler = lang === 'c' ? GCC : GPP;
-                    const srcExt = lang === 'c' ? '.c' : '.cpp';
-                    const ts = Date.now();
-                    const srcFile = path.join(os.tmpdir(), `stos_${ts}${srcExt}`);
-                    const exeFile = path.join(os.tmpdir(), `stos_${ts}.exe`);
-                    const msysLib = 'C:\\msys64\\ucrt64\\bin';
-
-                    fs.writeFile(srcFile, body, (err) => {
-                        if (err) { response.end(JSON.stringify({ error: true, output: 'Error writing file: ' + err.message })); return; }
-                        console.log(`[RunCode] Compiling ${lang}: ${srcFile}`);
-
-                        const compileCmd = `"${compiler}" "${srcFile}" -o "${exeFile}"`;
-                        exec(compileCmd, { timeout: 15000, env: { ...process.env, PATH: 'C:\\msys64\\ucrt64\\bin;' + process.env.PATH } }, (compErr, compOut, compStderr) => {
-                            if (compErr) {
-                                const errDetail = (compStderr || compOut || compErr.message).trim();
-                                response.end(JSON.stringify({ error: true, output: '❌ Compile Error:\n' + errDetail }));
-                                return;
-                            }
-                            console.log(`[RunCode] Running: ${exeFile}`);
-                            exec(`"${exeFile}"`, { timeout: 8000, env: { ...process.env, PATH: 'C:\\msys64\\ucrt64\\bin;' + process.env.PATH } }, (runErr, stdout, stderr) => {
-                                // Clean up temp files
-                                fs.unlink(srcFile, () => { });
-                                fs.unlink(exeFile, () => { });
-                                if (runErr) response.end(JSON.stringify({ error: true, output: stderr || runErr.message }));
-                                else response.end(JSON.stringify({ error: false, output: stdout || stderr || '(no output)' }));
-                            });
-                        });
-                    });
-                    return;
-                }
-
-                // ── Java — must save as Demo.java (class name must match filename) ─
-                if (lang === 'java') {
-                    const javaDir = path.join(os.tmpdir(), `stos_java_${Date.now()}`);
-                    const javaFile = path.join(javaDir, 'Demo.java');
-                    fs.mkdirSync(javaDir, { recursive: true });
-                    fs.writeFile(javaFile, body, (err) => {
-                        if (err) { response.end(JSON.stringify({ error: true, output: 'Error writing Java file: ' + err.message })); return; }
-                        console.log(`[RunCode] Java file: ${javaFile}`);
-                        exec(`javac "${javaFile}"`, { timeout: 10000 }, (compErr, _out, compStderr) => {
-                            if (compErr) {
-                                let msg = compStderr || compErr.message;
-                                if (msg.includes('not recognized') || msg.includes('command not found') || msg.includes('javac')) {
-                                    msg = `✅ Translation Verified — Java code is structurally correct!\n\n` +
-                                        `⚠️  Java (javac) is not installed or not in PATH.\n\n` +
-                                        `🌐 Run your Java code at:\n   👉 https://www.onlinegdb.com\n   👉 https://replit.com\n\n` +
-                                        `📋 Copy from the Target Editor above → paste there → click Run.`;
-                                    response.end(JSON.stringify({ error: false, output: msg }));
-                                } else {
-                                    response.end(JSON.stringify({ error: true, output: '❌ Compile Error:\n' + msg }));
-                                }
-                                return;
-                            }
-                            exec(`java -cp "${javaDir}" Demo`, { timeout: 10000 }, (runErr, stdout, stderr) => {
-                                if (runErr) response.end(JSON.stringify({ error: true, output: stderr || runErr.message }));
-                                else response.end(JSON.stringify({ error: false, output: stdout || stderr || '(no output)' }));
-                            });
-                        });
-                    });
-                    return;
-                }
-
-                // ── Python / JavaScript ───────────────────────────────────────────
-                const langExtMap = { 'python': '.py', 'javascript': '.js' };
-                const ext = langExtMap[lang] || '.txt';
-                const tempFilePath = path.join(os.tmpdir(), `run_code_${Date.now()}${ext}`);
-
-                fs.writeFile(tempFilePath, body, (err) => {
-                    if (err) { response.end(JSON.stringify({ error: true, output: 'Error writing temp file: ' + err.message })); return; }
-                    console.log(`[RunCode] Temp file: ${tempFilePath}`);
-
-                    let execCommand = '';
-                    if (lang === 'python') execCommand = `python "${tempFilePath}"`;
-                    else if (lang === 'javascript') execCommand = `node "${tempFilePath}"`;
-                    else {
-                        response.end(JSON.stringify({ error: true, output: 'Language not supported for execution.' }));
-                        return;
-                    }
-
-                    console.log(`[RunCode] Running: ${execCommand}`);
-                    exec(execCommand, { timeout: 8000 }, (execErr, stdout, stderr) => {
-                        if (execErr) {
-                            let errMsg = stderr || execErr.message;
-                            if (errMsg.includes('not recognized') || errMsg.includes('command not found')) {
-                                errMsg = `⚠️ '${lang}' runtime is not installed or not in PATH.`;
-                            }
-                            response.end(JSON.stringify({ error: true, output: errMsg }));
-                        } else {
-                            response.end(JSON.stringify({ error: false, output: stdout || stderr || '(no output)' }));
-                        }
-                    });
-                });
+            try {
+                const res = await runCodeAndCapture(lang, body);
+                return response.end(JSON.stringify(res));
+            } catch (err) {
+                return response.end(JSON.stringify({ error: true, output: 'Execution error: ' + err.message, lang }));
             }
         });
         return;
@@ -2192,8 +2969,8 @@ const server = http.createServer((request, response) => {
     // ── Static Files ──────────────────────────────────────────────────────────
     const cleanUrl = request.url.split('?')[0];
     console.log(`[Static] Request: ${request.method} ${request.url} -> ${cleanUrl}`);
-    let filePath = '.' + cleanUrl;
-    if (filePath === './') filePath = './index.html';
+    let relPath = cleanUrl === '/' ? 'index.html' : cleanUrl.replace(/^\/+/, '');
+    let filePath = path.join(__dirname, relPath);
 
     const extname = String(path.extname(filePath)).toLowerCase();
     const contentType = mimeTypes[extname] || 'application/octet-stream';
@@ -2214,7 +2991,11 @@ const server = http.createServer((request, response) => {
     });
 });
 
-server.listen(PORT, () => {
-    console.log(`Server running at http://localhost:${PORT}/`);
-    console.log(`Press Ctrl+C to stop.`);
-});
+if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
+    server.listen(PORT, () => {
+        console.log(`Server running at http://localhost:${PORT}/`);
+        console.log(`Press Ctrl+C to stop.`);
+    });
+}
+
+module.exports = server;

@@ -67,6 +67,19 @@ print(s)
 `,
         expect: '15',
     },
+    reuseLoopVar: {
+        python: `n = 3
+for i in range(n):
+    print(i)
+i = 1
+s = 0
+while i <= 3:
+    s = s + i
+    i = i + 1
+print(s)
+`,
+        expect: '0\n1\n2\n6',
+    },
     inputGrade: {
         python: `marks = float(input("Enter marks: "))
 if marks >= 40:
