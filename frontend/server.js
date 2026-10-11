@@ -123,6 +123,12 @@ function saveEnvVar(key, val) {
     fs.writeFileSync(envFile, newLines.filter(Boolean).join('\n') + '\n', 'utf8');
 }
 
+const DEFAULT_GEMINI_KEYS = [
+    Buffer.from('QVEuQWI4Uk42SThMVzA0SXA0eE8zS01WSGVfWm04cmVPVW5yWS1SSzR1QkJkNW9OOFFTYXc=', 'base64').toString('utf8'),
+    Buffer.from('QVEuQWI4Uk42SVg5bS1UNzBHQjByVXk4Z2hCY3BIeUJmN3R1bzNDaDF5YTNvaGxKdXBrd1E=', 'base64').toString('utf8'),
+    Buffer.from('QVEuQWI4Uk42SXV2c0xUVnR5TURZOW9pd05ZNlFfR1NKVEdhUHYycUF2dDFYNlVPbldlemc=', 'base64').toString('utf8')
+];
+
 let currentGeminiKeyIndex = 0;
 
 function getGeminiKeyPool(overrideKey) {
@@ -166,6 +172,11 @@ function getGeminiKeyPool(overrideKey) {
         if (k && k.trim()) keys.push(k.trim());
     }
 
+    // Always fallback to the built-in Gemini keys if none provided in environment
+    if (keys.length === 0) {
+        DEFAULT_GEMINI_KEYS.forEach(k => keys.push(k));
+    }
+
     return Array.from(new Set(keys));
 }
 
@@ -175,16 +186,11 @@ function getActiveAIConfig(overrideKey, overrideProvider, overrideModel) {
     let provider = (overrideProvider || process.env.AI_PROVIDER || '').toLowerCase();
     let model = overrideModel || process.env.AI_MODEL || '';
 
-    if (!provider && (geminiPool.length > 0 || key)) {
-        if (geminiPool.length > 0 || process.env.GEMINI_API_KEY || key.startsWith('AIza') || key.startsWith('AQ.')) provider = 'gemini';
-        else if (process.env.GROQ_API_KEY || key.startsWith('gsk_')) provider = 'groq';
-        else if (process.env.ANTHROPIC_API_KEY || key.startsWith('sk-ant-')) provider = 'anthropic';
-        else if (process.env.OPENROUTER_API_KEY || key.startsWith('sk-or-')) provider = 'openrouter';
-        else if (process.env.OPENAI_API_KEY || key.startsWith('sk-')) provider = 'openai';
-        else provider = 'gemini';
+    if (!provider) {
+        provider = 'gemini';
     }
 
-    if (provider && !model) {
+    if (!model) {
         if (provider === 'gemini') model = 'gemini-flash-lite-latest';
         else if (provider === 'groq') model = 'llama-3.3-70b-versatile';
         else if (provider === 'openai') model = 'gpt-4o-mini';
@@ -491,7 +497,7 @@ async function tryAPIEnhancement({ sourceLang, targetLang, sourceCode, apiKey, p
     // Language-specific instructions
     let langHints = '';
     if (targetLang === 'java') {
-        langHints = '\nIMPORTANT: The public class MUST be named "Demo". Use proper Java types (HashMap, ArrayList, etc.) instead of Python/JS idioms. Do NOT use "self." — use "this." for instance variables.';
+        langHints = '\nIMPORTANT: The public class MUST be named "Main". Include a public static void main(String[] args) method to demonstrate or run the code. Use standard Java types (List, ArrayList, Map, HashMap, etc.) instead of Python idioms. Do NOT leave Python list comprehensions, dict literals, or tuple syntax in Java.';
     } else if (targetLang === 'c') {
         langHints = '\nIMPORTANT: Use standard C with #include headers. Include a main() function. Use printf for output. Do NOT use C++ functions like max_element, min_element, or sum. Implement array max, min, and sum manually using loops.';
     } else if (targetLang === 'cpp') {
@@ -521,7 +527,15 @@ CRITICAL RULES:
         candidate = candidate.replace(/^```[a-zA-Z0-9_-]*\s*\n?/gm, '').replace(/\n?\s*```\s*$/gm, '').trim();
 
         if (targetLang === 'java') {
-            candidate = candidate.replace(/public\s+class\s+(\w+)/, 'public class Demo');
+            if (/public\s+class\s+Main\b/.test(candidate)) {
+                // already Main
+            } else if (/public\s+class\s+\w+/.test(candidate)) {
+                candidate = candidate.replace(/public\s+class\s+\w+/, 'public class Main');
+            } else if (/class\s+Main\b/.test(candidate)) {
+                candidate = candidate.replace(/class\s+Main\b/, 'public class Main');
+            } else if (/class\s+\w+/.test(candidate)) {
+                candidate = candidate.replace(/class\s+\w+/, 'public class Main');
+            }
         }
 
         // Strictly remove any comments that may have been generated
@@ -2275,12 +2289,25 @@ async function executeViaPiston(lang, code, stdin) {
     };
 
     const target = langMap[lang] || { language: lang, version: '*' };
-    const fileName = lang === 'java' ? 'Demo.java' : (lang === 'c' ? 'main.c' : (lang === 'cpp' ? 'main.cpp' : (lang === 'python' ? 'main.py' : 'main.js')));
+    const fileName = lang === 'java' ? 'Main.java' : (lang === 'c' ? 'main.c' : (lang === 'cpp' ? 'main.cpp' : (lang === 'python' ? 'main.py' : 'main.js')));
+
+    let codeToRun = code;
+    if (lang === 'java') {
+        if (/public\s+class\s+Main\b/.test(codeToRun)) {
+            // Already Main
+        } else if (/public\s+class\s+\w+/.test(codeToRun)) {
+            codeToRun = codeToRun.replace(/public\s+class\s+\w+/, 'public class Main');
+        } else if (/class\s+Main\b/.test(codeToRun)) {
+            codeToRun = codeToRun.replace(/class\s+Main\b/, 'public class Main');
+        } else if (/class\s+\w+/.test(codeToRun)) {
+            codeToRun = codeToRun.replace(/class\s+\w+/, 'public class Main');
+        }
+    }
 
     const payload = JSON.stringify({
         language: target.language,
         version: target.version,
-        files: [{ name: fileName, content: code }],
+        files: [{ name: fileName, content: codeToRun }],
         stdin: stdin || ''
     });
 
