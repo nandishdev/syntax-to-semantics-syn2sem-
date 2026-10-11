@@ -2531,6 +2531,30 @@ const mimeTypes = {
     '.wasm': 'application/wasm'
 };
 
+// Preload core frontend static assets so they are permanently available in serverless environments (Vercel)
+const preloadedStaticAssets = {};
+function readAssetSafe(filename) {
+    const searchDirs = [
+        __dirname,
+        process.cwd(),
+        path.join(process.cwd(), 'frontend'),
+        path.join(__dirname, 'frontend')
+    ];
+    for (const d of searchDirs) {
+        try {
+            const p = path.join(d, filename);
+            if (fs.existsSync(p)) {
+                return fs.readFileSync(p);
+            }
+        } catch (_) {}
+    }
+    return null;
+}
+
+try { preloadedStaticAssets['index.html'] = readAssetSafe('index.html'); } catch (_) {}
+try { preloadedStaticAssets['styles.css'] = readAssetSafe('styles.css'); } catch (_) {}
+try { preloadedStaticAssets['script.js'] = readAssetSafe('script.js'); } catch (_) {}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // HTTP Server + Routes
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2970,25 +2994,61 @@ const server = http.createServer((request, response) => {
     const cleanUrl = request.url.split('?')[0];
     console.log(`[Static] Request: ${request.method} ${request.url} -> ${cleanUrl}`);
     let relPath = cleanUrl === '/' ? 'index.html' : cleanUrl.replace(/^\/+/, '');
-    let filePath = path.join(__dirname, relPath);
-
-    const extname = String(path.extname(filePath)).toLowerCase();
+    const extname = String(path.extname(relPath || 'index.html')).toLowerCase();
     const contentType = mimeTypes[extname] || 'application/octet-stream';
 
-    fs.readFile(filePath, (error, content) => {
-        if (error) {
-            if (error.code === 'ENOENT') { response.writeHead(404); response.end("404 Not Found"); }
-            else { response.writeHead(500); response.end('Server error: ' + error.code); }
-        } else {
+    // 1. Instant serve from preloaded cache (eliminates 404 in serverless environments)
+    if (preloadedStaticAssets[relPath]) {
+        response.writeHead(200, {
+            'Content-Type': contentType,
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+        });
+        return response.end(preloadedStaticAssets[relPath]);
+    }
+
+    // 2. Multi-path filesystem search
+    const candidatePaths = [
+        path.join(__dirname, relPath),
+        path.join(process.cwd(), relPath),
+        path.join(process.cwd(), 'frontend', relPath),
+        path.join(__dirname, 'frontend', relPath)
+    ];
+
+    const foundPath = candidatePaths.find(p => {
+        try { return fs.existsSync(p); } catch (_) { return false; }
+    });
+
+    if (foundPath) {
+        fs.readFile(foundPath, (error, content) => {
+            if (error) {
+                if (error.code === 'ENOENT' && preloadedStaticAssets['index.html']) {
+                    response.writeHead(200, { 'Content-Type': 'text/html' });
+                    return response.end(preloadedStaticAssets['index.html']);
+                }
+                response.writeHead(500);
+                return response.end('Server error: ' + error.code);
+            }
             response.writeHead(200, {
                 'Content-Type': contentType,
                 'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
                 'Pragma': 'no-cache',
                 'Expires': '0'
             });
-            response.end(content, 'utf-8');
-        }
-    });
+            response.end(content);
+        });
+        return;
+    }
+
+    // 3. Fallback for root / SPA html navigation
+    if (preloadedStaticAssets['index.html'] && (cleanUrl === '/' || !path.extname(cleanUrl))) {
+        response.writeHead(200, { 'Content-Type': 'text/html' });
+        return response.end(preloadedStaticAssets['index.html']);
+    }
+
+    response.writeHead(404);
+    response.end("404 Not Found");
 });
 
 if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
