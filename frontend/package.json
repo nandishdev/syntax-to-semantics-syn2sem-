@@ -5,6 +5,8 @@
   "main": "script.js",
   "scripts": {
     "test": "node tests/test-runner.js",
+    "test:ide-helper": "node tests/ide-companion.test.js",
+    "ide-helper": "node ide-companion.js",
     "start": "node server.js"
   },
   "keywords": [],

@@ -9,6 +9,9 @@
           "index.html",
           "styles.css",
           "script.js",
+          "ide-companion.js",
+          "ide-helper-install.ps1",
+          "install-ide-helper.cmd",
           "compiler/**"
         ]
       }

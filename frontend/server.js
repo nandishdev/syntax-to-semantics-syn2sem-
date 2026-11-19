@@ -123,13 +123,8 @@ function saveEnvVar(key, val) {
     fs.writeFileSync(envFile, newLines.filter(Boolean).join('\n') + '\n', 'utf8');
 }
 
-const DEFAULT_GEMINI_KEYS = [
-    Buffer.from('QVEuQWI4Uk42SThMVzA0SXA0eE8zS01WSGVfWm04cmVPVW5yWS1SSzR1QkJkNW9OOFFTYXc=', 'base64').toString('utf8'),
-    Buffer.from('QVEuQWI4Uk42SVg5bS1UNzBHQjByVXk4Z2hCY3BIeUJmN3R1bzNDaDF5YTNvaGxKdXBrd1E=', 'base64').toString('utf8'),
-    Buffer.from('QVEuQWI4Uk42SXV2c0xUVnR5TURZOW9pd05ZNlFfR1NKVEdhUHYycUF2dDFYNlVPbldlemc=', 'base64').toString('utf8')
-];
-
 let currentGeminiKeyIndex = 0;
+const currentProviderKeyIndices = Object.create(null);
 
 function getGeminiKeyPool(overrideKey) {
     const keys = [];
@@ -172,17 +167,10 @@ function getGeminiKeyPool(overrideKey) {
         if (k && k.trim()) keys.push(k.trim());
     }
 
-    // Always fallback to the built-in Gemini keys if none provided in environment
-    if (keys.length === 0) {
-        DEFAULT_GEMINI_KEYS.forEach(k => keys.push(k));
-    }
-
     return Array.from(new Set(keys));
 }
 
 function getActiveAIConfig(overrideKey, overrideProvider, overrideModel) {
-    const geminiPool = getGeminiKeyPool(overrideKey);
-    const key = overrideKey || (geminiPool.length > 0 ? geminiPool[0] : '') || process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENROUTER_API_KEY || process.env.AI_API_KEY || process.env.API_KEY || '';
     let provider = (overrideProvider || process.env.AI_PROVIDER || '').toLowerCase();
     let model = overrideModel || process.env.AI_MODEL || '';
 
@@ -197,6 +185,19 @@ function getActiveAIConfig(overrideKey, overrideProvider, overrideModel) {
         else if (provider === 'anthropic' || provider === 'claude') model = 'claude-3-5-haiku-20241022';
         else if (provider === 'openrouter') model = 'meta-llama/llama-3.3-70b-instruct';
     }
+
+    const providerKey = provider === 'gemini'
+        ? getGeminiKeyPool()[0] || process.env.AI_API_KEY || process.env.API_KEY || ''
+        : provider === 'groq'
+            ? process.env.GROQ_API_KEY || process.env.AI_API_KEY || process.env.API_KEY || ''
+            : provider === 'openai'
+                ? process.env.OPENAI_API_KEY || process.env.AI_API_KEY || process.env.API_KEY || ''
+                : provider === 'anthropic' || provider === 'claude'
+                    ? process.env.ANTHROPIC_API_KEY || process.env.AI_API_KEY || process.env.API_KEY || ''
+                    : provider === 'openrouter'
+                        ? process.env.OPENROUTER_API_KEY || process.env.AI_API_KEY || process.env.API_KEY || ''
+                        : process.env.AI_API_KEY || process.env.API_KEY || '';
+    const key = overrideKey || providerKey;
 
     return { key, provider, model };
 }
@@ -232,7 +233,7 @@ async function callGemini(apiKey, model, prompt) {
         throw new Error('No Gemini API key available in key pool');
     }
 
-    const candidates = model ? [model] : ['gemini-flash-lite-latest', 'gemini-3.1-flash-lite', 'gemini-3.5-flash', 'gemini-flash-latest'];
+    const candidates = [...new Set([model, 'gemini-flash-lite-latest', 'gemini-3.1-flash-lite', 'gemini-3.5-flash', 'gemini-flash-latest'].filter(Boolean))];
     let lastErr = null;
     const totalKeys = keyPool.length;
 
@@ -241,7 +242,6 @@ async function callGemini(apiKey, model, prompt) {
     for (let offset = 0; offset < totalKeys; offset++) {
         const keyIdx = (currentGeminiKeyIndex + offset) % totalKeys;
         const currentKey = keyPool[keyIdx];
-        const maskedKey = currentKey.length > 8 ? `${currentKey.slice(0, 4)}...${currentKey.slice(-4)}` : '****';
         let keyLimitHit = false;
 
         for (const m of candidates) {
@@ -273,12 +273,13 @@ async function callGemini(apiKey, model, prompt) {
                 const isLimit = errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('resource_exhausted') || errMsg.includes('rate limit') || errMsg.includes('limit exceeded');
                 
                 if (isLimit) {
-                    console.warn(`[Key Failover] Key #${keyIdx + 1} (${maskedKey}) exceeded rate/quota limit. Auto-switching to next key...`);
+                    console.warn(`[Key Failover] Key #${keyIdx + 1} exceeded its rate/quota limit. Auto-switching to next key...`);
                     keyLimitHit = true;
                     lastErr = e;
                     break;
                 } else {
-                    console.warn(`[Gemini] Model ${m} with Key #${keyIdx + 1} unavailable (${e.message}), trying next candidate...`);
+                    const failure = errMsg.match(/^http \d+/)?.[0] || (errMsg.includes('timed out') ? 'request timed out' : 'request failed');
+                    console.warn(`[Gemini] Model ${m} with Key #${keyIdx + 1} unavailable (${failure}); trying next candidate...`);
                     lastErr = e;
                 }
             }
@@ -410,6 +411,42 @@ async function dispatchAPITranslation(apiKey, provider, model, prompt) {
     return await callGemini(apiKey, model, prompt);
 }
 
+async function dispatchAPITranslationWithFailover(apiKey, provider, model, prompt) {
+    const providerName = (provider || '').toLowerCase();
+    if (providerName === 'gemini') {
+        return dispatchAPITranslation(apiKey, provider, model, prompt);
+    }
+
+    const keys = Array.from(new Set(String(apiKey).split(/[\n,;]+/).map(key => key.trim()).filter(Boolean)));
+    if (keys.length < 2) {
+        return dispatchAPITranslation(apiKey, provider, model, prompt);
+    }
+
+    const startIndex = (currentProviderKeyIndices[providerName] || 0) % keys.length;
+    let lastError = null;
+    for (let offset = 0; offset < keys.length; offset++) {
+        const keyIndex = (startIndex + offset) % keys.length;
+        try {
+            const result = await dispatchAPITranslation(keys[keyIndex], provider, model, prompt);
+            currentProviderKeyIndices[providerName] = keyIndex;
+            return result;
+        } catch (error) {
+            const message = String(error.message || '').toLowerCase();
+            const status = Number((message.match(/^http (\d+)/) || [])[1]);
+            const shouldFailover = status === 401 || status === 402 || status === 403 || status === 429
+                || /quota|resource_exhausted|rate.?limit|limit exceeded|insufficient_quota|billing hard limit/.test(message);
+            if (!shouldFailover) throw error;
+
+            lastError = error;
+            if (offset < keys.length - 1) {
+                console.warn(`[Key Failover] ${providerName} key #${keyIndex + 1} was rejected or rate-limited; trying the next key...`);
+            }
+        }
+    }
+
+    throw lastError || new Error(`All ${providerName} API keys are unavailable`);
+}
+
 function stripComments(code, lang) {
     if (!code) return code;
     let lines = code.split(/\r?\n/);
@@ -522,7 +559,7 @@ CRITICAL RULES:
     console.log(`[Cloud AI API] Translating ${sourceLang} -> ${targetLang} via ${cfg.provider || 'auto'} (${cfg.model || 'default'})...`);
 
     try {
-        const { text, providerName } = await dispatchAPITranslation(cfg.key, cfg.provider, cfg.model, prompt);
+        const { text, providerName } = await dispatchAPITranslationWithFailover(cfg.key, cfg.provider, cfg.model, prompt);
         let candidate = String(text || '').trim();
         candidate = candidate.replace(/^```[a-zA-Z0-9_-]*\s*\n?/gm, '').replace(/\n?\s*```\s*$/gm, '').trim();
 
@@ -2184,28 +2221,61 @@ function sanitizeTargetSyntax(code, targetLang) {
     if (!code || !code.trim()) return code;
 
     if (targetLang === 'python') {
-        // Better Python sanitizer: remove isolated braces, preserve string content,
-        // and compute indentation by scanning structural tokens (if/elif/else/for/while/def/class)
+        // If Python code is already syntactically valid according to Tree-sitter,
+        // preserve it completely so dict literals like return { "numbers": ... } and sets aren't stripped!
+        if (Parser && langParsers['python']) {
+            try {
+                const pyParser = new Parser();
+                pyParser.setLanguage(langParsers['python']);
+                const tree = pyParser.parse(code);
+                let errCount = 0;
+                function checkPy(node) {
+                    if (!node) return;
+                    if (node.isMissing || node.type === 'ERROR') errCount++;
+                    for (let i = 0; i < node.childCount; i++) checkPy(node.child(i));
+                }
+                checkPy(tree.rootNode);
+                if (errCount === 0) {
+                    return code;
+                }
+            } catch (e) {}
+        }
+
+        // Only cleanup braces from AST output if braces are NOT part of dictionaries or sets
         const lines = code.split(/\r?\n/);
         let out = [];
         let depth = 0;
+        let inDict = false;
 
         for (let rawLine of lines) {
             if (!rawLine) continue;
-            // Remove braces only when they appear as standalone tokens
-            let line = rawLine.replace(/(^|\s)[{}](\s|$)/g, ' ').trim();
+            let line = rawLine;
+
+            // Track if we are inside a multi-line dictionary/set literal
+            if (/return\s*\{|^\s*\{|\b=\s*\{|:\s*\{|\(\s*\{/.test(line)) {
+                inDict = true;
+            }
+
+            if (!inDict) {
+                // Remove standalone braces from control structures (e.g. if x { -> if x:)
+                line = line.replace(/(^|\s)[{}](\s|$)/g, ' ').trim();
+            } else {
+                line = line.trim();
+            }
+
+            if (line.includes('}') && !line.includes('{')) {
+                inDict = false;
+            }
+
             if (!line) continue;
 
-            // If this is an 'elif' or 'else', it should dedent one level relative to previous block
             if (/^elif\b/.test(line) || /^else\b/.test(line)) {
                 if (depth > 0) depth--;
             }
 
-            // Write the line with current depth
             out.push('    '.repeat(Math.max(0, depth)) + line);
 
-            // If the line opens a new block (ends with ':'), increase depth
-            if (/:\s*$/.test(line)) {
+            if (/:\s*$/.test(line) && !inDict) {
                 depth++;
             }
         }
@@ -2276,9 +2346,9 @@ function sanitizeTargetSyntax(code, targetLang) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // Piston API & Cloud Compiler Execution Engine
 // ═══════════════════════════════════════════════════════════════════════════════
-async function executeViaPiston(lang, code, stdin) {
+async function executeViaPiston(lang, code, stdin, pistonKeyOverride) {
     const pistonUrl = process.env.PISTON_URL || 'https://emkc.org/api/v2/piston/execute';
-    const pistonKey = process.env.PISTON_KEY || '';
+    const pistonKey = pistonKeyOverride || process.env.PISTON_KEY || '';
 
     const langMap = {
         'python': { language: 'python', version: '*' },
@@ -2506,15 +2576,32 @@ function runCodeLocallyAndCapture(lang, body) {
     });
 }
 
-async function runCodeAndCapture(lang, body) {
+async function runCodeAndCapture(lang, body, options = {}) {
     const effectiveStdin = defaultStdinFor(body);
-    const runnerPreference = (process.env.EXECUTION_RUNNER || 'piston').toLowerCase();
+    const requestedRunner = String(options.runner || '').toLowerCase();
+    const runnerPreference = ['piston', 'cloud', 'local'].includes(requestedRunner)
+        ? requestedRunner
+        : (process.env.EXECUTION_RUNNER || 'piston').toLowerCase();
+
+    if (runnerPreference === 'local') {
+        return runCodeLocallyAndCapture(lang, body);
+    }
+
+    if (runnerPreference === 'cloud') {
+        try {
+            console.log(`[RunCode] Executing ${lang} via Cloud Compiler API...`);
+            return await executeViaCloudCompiler(lang, body, effectiveStdin);
+        } catch (cloudErr) {
+            console.warn(`[RunCode] Cloud Compiler API failed: ${cloudErr.message}. Trying Local...`);
+            return runCodeLocallyAndCapture(lang, body);
+        }
+    }
 
     // 1. Try Piston API if configured or preferred
-    if (runnerPreference === 'piston' || process.env.PISTON_URL || process.env.PISTON_KEY) {
+    if (runnerPreference === 'piston' || process.env.PISTON_URL || process.env.PISTON_KEY || options.pistonKey) {
         try {
             console.log(`[RunCode] Executing ${lang} via Piston API...`);
-            const pistonRes = await executeViaPiston(lang, body, effectiveStdin);
+            const pistonRes = await executeViaPiston(lang, body, effectiveStdin, options.pistonKey);
             return pistonRes;
         } catch (pistonErr) {
             console.warn(`[RunCode] Piston API unavailable: ${pistonErr.message}. Trying Cloud Compiler...`);
@@ -2549,6 +2636,8 @@ const mimeTypes = {
     '.jpg': 'image/jpg',
     '.gif': 'image/gif',
     '.svg': 'image/svg+xml',
+    '.ps1': 'text/plain; charset=utf-8',
+    '.cmd': 'application/octet-stream',
     '.wav': 'audio/wav',
     '.mp4': 'video/mp4',
     '.woff': 'application/font-woff',
@@ -2581,6 +2670,9 @@ function readAssetSafe(filename) {
 try { preloadedStaticAssets['index.html'] = readAssetSafe('index.html'); } catch (_) {}
 try { preloadedStaticAssets['styles.css'] = readAssetSafe('styles.css'); } catch (_) {}
 try { preloadedStaticAssets['script.js'] = readAssetSafe('script.js'); } catch (_) {}
+try { preloadedStaticAssets['ide-companion.js'] = readAssetSafe('ide-companion.js'); } catch (_) {}
+try { preloadedStaticAssets['ide-helper-install.ps1'] = readAssetSafe('ide-helper-install.ps1'); } catch (_) {}
+try { preloadedStaticAssets['install-ide-helper.cmd'] = readAssetSafe('install-ide-helper.cmd'); } catch (_) {}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // HTTP Server + Routes
@@ -2796,19 +2888,15 @@ const server = http.createServer((request, response) => {
     // ── AI API & Compiler Config ──────────────────────────────────────────────
     if (request.url === '/api-config' && request.method === 'GET') {
         const cfg = getActiveAIConfig();
-        const maskedKey = cfg.key ? (cfg.key.slice(0, 4) + '...' + cfg.key.slice(-4)) : '';
         const runner = (process.env.EXECUTION_RUNNER || 'piston').toLowerCase();
         const pistonUrl = process.env.PISTON_URL || '';
-        const pistonKey = process.env.PISTON_KEY ? (process.env.PISTON_KEY.slice(0, 4) + '...' + process.env.PISTON_KEY.slice(-4)) : '';
         response.writeHead(200, { 'Content-Type': 'application/json' });
         return response.end(JSON.stringify({
             configured: Boolean(cfg.key),
             provider: cfg.provider || 'none',
             model: cfg.model || 'none',
-            maskedKey,
             runner,
-            pistonUrl,
-            pistonKey
+            pistonUrl
         }));
     }
 
@@ -2819,6 +2907,20 @@ const server = http.createServer((request, response) => {
             try {
                 const parsed = JSON.parse(body || '{}');
                 const { apiKey, provider, model, runner, pistonUrl, pistonKey } = parsed;
+                if (process.env.VERCEL) {
+                    if (apiKey) {
+                        response.writeHead(400, { 'Content-Type': 'application/json' });
+                        return response.end(JSON.stringify({
+                            error: true,
+                            message: 'Refresh the page and save your API key again. Cloud settings keep API keys in this browser.'
+                        }));
+                    }
+                    response.writeHead(200, { 'Content-Type': 'application/json' });
+                    return response.end(JSON.stringify({
+                        success: true,
+                        message: 'Browser settings saved. API keys are not stored on the server.'
+                    }));
+                }
                 if (apiKey !== undefined) {
                     saveEnvVar('AI_API_KEY', apiKey);
                 }
@@ -2906,7 +3008,7 @@ const server = http.createServer((request, response) => {
                     return n;
                 }
 
-                const reqApiKey = urlObj.searchParams.get('apiKey') || request.headers['x-api-key'] || '';
+                const reqApiKey = urlObj.searchParams.get('apiKey') || request.headers['x-api-keys'] || request.headers['x-api-key'] || '';
                 const reqProvider = urlObj.searchParams.get('provider') || request.headers['x-api-provider'] || '';
                 const reqModel = urlObj.searchParams.get('model') || request.headers['x-api-model'] || '';
 
@@ -2932,6 +3034,7 @@ const server = http.createServer((request, response) => {
                         confidence: finalVerified ? 'validated' : 'needs review',
                         gapStatus: finalVerified ? 'Translation validated' : 'Review output for syntax issues',
                         targetVerified: finalVerified,
+                        translationMethod: engine === 'api' ? 'ai' : 'compiler',
                         engineName: usedEngine
                     }));
                 };
@@ -3007,7 +3110,12 @@ const server = http.createServer((request, response) => {
         request.on('end', async () => {
             response.writeHead(200, { 'Content-Type': 'application/json' });
             try {
-                const res = await runCodeAndCapture(lang, body);
+                const runner = request.headers['x-execution-runner'];
+                const pistonKey = request.headers['x-piston-api-key'];
+                const res = await runCodeAndCapture(lang, body, {
+                    runner: Array.isArray(runner) ? runner[0] : runner,
+                    pistonKey: Array.isArray(pistonKey) ? pistonKey[0] : pistonKey
+                });
                 return response.end(JSON.stringify(res));
             } catch (err) {
                 return response.end(JSON.stringify({ error: true, output: 'Execution error: ' + err.message, lang }));
@@ -3023,19 +3131,22 @@ const server = http.createServer((request, response) => {
     let relPath = cleanUrl === '/' ? 'index.html' : cleanUrl.replace(/^\/+/, '');
     const extname = String(path.extname(relPath || 'index.html')).toLowerCase();
     const contentType = mimeTypes[extname] || 'application/octet-stream';
-
-    // 1. Instant serve from preloaded cache (eliminates 404 in serverless environments)
-    if (preloadedStaticAssets[relPath]) {
-        response.writeHead(200, {
-            'Content-Type': contentType,
-            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
-            'Pragma': 'no-cache',
-            'Expires': '0'
-        });
-        return response.end(preloadedStaticAssets[relPath]);
+    const attachmentNames = {
+        'install-ide-helper.cmd': 'Syn2Sem-IDE-Helper-Setup.cmd',
+        'ide-helper-install.ps1': 'Syn2Sem-IDE-Helper-Install.ps1'
+    };
+    const staticHeaders = {
+        'Content-Type': contentType,
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+    };
+    if (attachmentNames[relPath]) {
+        staticHeaders['Content-Disposition'] = `attachment; filename="${attachmentNames[relPath]}"`;
+        staticHeaders['X-Content-Type-Options'] = 'nosniff';
     }
 
-    // 2. Multi-path filesystem search
+    // 1. Multi-path filesystem search (serves fresh disk edits with zero delay)
     const candidatePaths = [
         path.join(__dirname, relPath),
         path.join(process.cwd(), relPath),
@@ -3044,28 +3155,29 @@ const server = http.createServer((request, response) => {
     ];
 
     const foundPath = candidatePaths.find(p => {
-        try { return fs.existsSync(p); } catch (_) { return false; }
+        try { return fs.existsSync(p) && fs.statSync(p).isFile(); } catch (_) { return false; }
     });
 
     if (foundPath) {
         fs.readFile(foundPath, (error, content) => {
             if (error) {
-                if (error.code === 'ENOENT' && preloadedStaticAssets['index.html']) {
-                    response.writeHead(200, { 'Content-Type': 'text/html' });
-                    return response.end(preloadedStaticAssets['index.html']);
+                if (preloadedStaticAssets[relPath]) {
+                    response.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'no-store, no-cache, max-age=0' });
+                    return response.end(preloadedStaticAssets[relPath]);
                 }
                 response.writeHead(500);
                 return response.end('Server error: ' + error.code);
             }
-            response.writeHead(200, {
-                'Content-Type': contentType,
-                'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
-                'Pragma': 'no-cache',
-                'Expires': '0'
-            });
-            response.end(content);
+            response.writeHead(200, staticHeaders);
+            return response.end(content);
         });
         return;
+    }
+
+    // 2. Instant serve from preloaded cache (for serverless environments)
+    if (preloadedStaticAssets[relPath]) {
+        response.writeHead(200, staticHeaders);
+        return response.end(preloadedStaticAssets[relPath]);
     }
 
     // 3. Fallback for root / SPA html navigation

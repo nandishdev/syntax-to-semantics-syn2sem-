@@ -9,6 +9,9 @@
           "frontend/index.html",
           "frontend/styles.css",
           "frontend/script.js",
+          "frontend/ide-companion.js",
+          "frontend/ide-helper-install.ps1",
+          "frontend/install-ide-helper.cmd",
           "frontend/compiler/**"
         ]
       }
