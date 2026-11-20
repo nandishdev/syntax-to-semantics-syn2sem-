@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -17,6 +18,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 </head>
+
 <body class="dark-mode"> <!-- Default theme is dark -->
 
     <!-- Toast Notification -->
@@ -25,21 +27,32 @@
     <!-- Auth Modal Overlay (Sliding Hero Register & Login Card) -->
     <div id="auth-overlay" class="auth-overlay hidden" style="display: none;">
         <div class="auth-modal-wrapper">
-            <button id="btn-close-auth" class="auth-close-btn" type="button" aria-label="Close sign-in dialog" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
-            <div id="auth-card" class="card" role="dialog" aria-modal="true" aria-labelledby="auth-dialog-title" tabindex="-1">
+            <button id="btn-close-auth" class="auth-close-btn" type="button" aria-label="Close sign-in dialog"
+                title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+            <div id="auth-card" class="card" role="dialog" aria-modal="true" aria-labelledby="auth-dialog-title"
+                tabindex="-1">
                 <div class="card-bg" aria-hidden="true"></div>
 
                 <!-- Hero Section (Right on Login, Left on Register) -->
-                <div class="auth-hero login" style="z-index:10; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; color:#fff;">
+                <div class="auth-hero login"
+                    style="z-index:10; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; color:#fff;">
                     <h2 style="color:#fff !important; font-size:2rem; font-weight:800; margin:0;">Get Started</h2>
-                    <p style="color:#fff !important; font-size:0.95rem; line-height:1.5; margin:8px 0;">Open an account with us to save your code translations and access your history anywhere.</p>
-                    <button type="button" class="switch" id="btn-switch-to-register" onclick="event.stopPropagation(); window.toggleAuthCard && window.toggleAuthCard(true)" style="margin-top:10px; padding:12px 42px; border-radius:50px; border:2px solid #fff; background:#fff; color:#0284c7; font-size:1rem; font-weight:700; cursor:pointer; pointer-events:auto;">Sign Up</button>
+                    <p style="color:#fff !important; font-size:0.95rem; line-height:1.5; margin:8px 0;">Open an account
+                        with us to save your code translations and access your history anywhere.</p>
+                    <button type="button" class="switch" id="btn-switch-to-register"
+                        onclick="event.stopPropagation(); window.toggleAuthCard && window.toggleAuthCard(true)"
+                        style="margin-top:10px; padding:12px 42px; border-radius:50px; border:2px solid #fff; background:#fff; color:#0284c7; font-size:1rem; font-weight:700; cursor:pointer; pointer-events:auto;">Sign
+                        Up</button>
                 </div>
 
-                <div class="auth-hero register" style="z-index:10; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; color:#fff;">
+                <div class="auth-hero register"
+                    style="z-index:10; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; color:#fff;">
                     <h2 style="color:#fff !important; font-size:2rem; font-weight:800; margin:0;">Welcome Back</h2>
-                    <p style="color:#fff !important; font-size:0.95rem; line-height:1.5; margin:8px 0;">Sign in to manage your translations, view syntax analysis, and sync your code history.</p>
-                    <button type="button" class="switch" id="btn-switch-to-login" onclick="event.stopPropagation(); window.toggleAuthCard && window.toggleAuthCard(false)" style="margin-top:10px; padding:12px 42px; border-radius:50px; border:2px solid #fff; background:#fff; color:#0284c7; font-size:1rem; font-weight:700; cursor:pointer; pointer-events:auto;">Login</button>
+                    <p style="color:#fff !important; font-size:0.95rem; line-height:1.5; margin:8px 0;">Sign in to
+                        manage your translations, view syntax analysis, and sync your code history.</p>
+                    <button type="button" class="switch" id="btn-switch-to-login"
+                        onclick="event.stopPropagation(); window.toggleAuthCard && window.toggleAuthCard(false)"
+                        style="margin-top:10px; padding:12px 42px; border-radius:50px; border:2px solid #fff; background:#fff; color:#0284c7; font-size:1rem; font-weight:700; cursor:pointer; pointer-events:auto;">Login</button>
                 </div>
 
                 <!-- Login Form -->
@@ -50,10 +63,14 @@
                     <!-- Google Sign-in Button -->
                     <button type="button" id="btn-google-login" class="btn-google" data-auth-action>
                         <svg class="google-icon" viewBox="0 0 24 24" width="18" height="18">
-                            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                            <path fill="#4285F4"
+                                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                            <path fill="#34A853"
+                                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                            <path fill="#FBBC05"
+                                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                            <path fill="#EA4335"
+                                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
                         </svg>
                         <span>Continue with Google</span>
                     </button>
@@ -62,14 +79,19 @@
 
                     <form id="form-login-email">
                         <div class="auth-field">
-                            <label for="login-email"><i class="fa-solid fa-envelope" aria-hidden="true"></i> Email</label>
-                            <input type="email" id="login-email" placeholder="name@example.com" required autocomplete="email">
+                            <label for="login-email"><i class="fa-solid fa-envelope" aria-hidden="true"></i>
+                                Email</label>
+                            <input type="email" id="login-email" placeholder="name@example.com" required
+                                autocomplete="email">
                         </div>
                         <div class="auth-field">
-                            <label for="login-password"><i class="fa-solid fa-lock" aria-hidden="true"></i> Password</label>
+                            <label for="login-password"><i class="fa-solid fa-lock" aria-hidden="true"></i>
+                                Password</label>
                             <div class="auth-password-control">
-                                <input type="password" id="login-password" placeholder="Password" required autocomplete="current-password">
-                                <button type="button" class="auth-password-toggle" data-password-toggle="login-password" aria-label="Show password" aria-pressed="false">Show</button>
+                                <input type="password" id="login-password" placeholder="Password" required
+                                    autocomplete="current-password">
+                                <button type="button" class="auth-password-toggle" data-password-toggle="login-password"
+                                    aria-label="Show password" aria-pressed="false">Show</button>
                             </div>
                         </div>
                         <div class="auth-form-options">
@@ -77,13 +99,19 @@
                                 <input type="checkbox" id="remember-me" checked>
                                 <span>Keep me signed in</span>
                             </label>
-                            <button type="button" id="btn-forgot-password" class="auth-text-button">Forgot password?</button>
+                            <button type="button" id="btn-forgot-password" class="auth-text-button">Forgot
+                                password?</button>
                         </div>
-                        <div id="login-error" class="auth-error-msg hidden" role="alert" aria-live="assertive" style="display: none;"></div>
-                        <div id="login-status" class="auth-status-msg hidden" role="status" aria-live="polite" style="display: none;"></div>
+                        <div id="login-error" class="auth-error-msg hidden" role="alert" aria-live="assertive"
+                            style="display: none;"></div>
+                        <div id="login-status" class="auth-status-msg hidden" role="status" aria-live="polite"
+                            style="display: none;"></div>
                         <button type="submit" class="btn btn-gradient btn-auth-submit" data-auth-action>Sign In</button>
                         <p style="text-align: center; margin-top: 12px; font-size: 0.85rem; color: #94a3b8;">
-                            Don't have an account? <a href="javascript:void(0)" id="link-go-to-register" onclick="window.toggleAuthCard && window.toggleAuthCard(true)" style="color: #06b6d4; font-weight: 700; text-decoration: underline;">Sign Up / Register</a>
+                            Don't have an account? <a href="javascript:void(0)" id="link-go-to-register"
+                                onclick="window.toggleAuthCard && window.toggleAuthCard(true)"
+                                style="color: #06b6d4; font-weight: 700; text-decoration: underline;">Sign Up /
+                                Register</a>
                         </p>
                     </form>
                 </div>
@@ -96,10 +124,14 @@
                     <!-- Google Sign-up Button -->
                     <button type="button" id="btn-google-register" class="btn-google" data-auth-action>
                         <svg class="google-icon" viewBox="0 0 24 24" width="18" height="18">
-                            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                            <path fill="#4285F4"
+                                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                            <path fill="#34A853"
+                                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                            <path fill="#FBBC05"
+                                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                            <path fill="#EA4335"
+                                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
                         </svg>
                         <span>Sign up with Google</span>
                     </button>
@@ -108,25 +140,38 @@
 
                     <form id="form-register-email">
                         <div class="auth-field">
-                            <label for="register-name"><i class="fa-solid fa-user" aria-hidden="true"></i> Full Name</label>
+                            <label for="register-name"><i class="fa-solid fa-user" aria-hidden="true"></i> Full
+                                Name</label>
                             <input type="text" id="register-name" placeholder="John Doe" required autocomplete="name">
                         </div>
                         <div class="auth-field">
-                            <label for="register-email"><i class="fa-solid fa-envelope" aria-hidden="true"></i> Email</label>
-                            <input type="email" id="register-email" placeholder="name@example.com" required autocomplete="email">
+                            <label for="register-email"><i class="fa-solid fa-envelope" aria-hidden="true"></i>
+                                Email</label>
+                            <input type="email" id="register-email" placeholder="name@example.com" required
+                                autocomplete="email">
                         </div>
                         <div class="auth-field">
-                            <label for="register-password"><i class="fa-solid fa-lock" aria-hidden="true"></i> Password</label>
+                            <label for="register-password"><i class="fa-solid fa-lock" aria-hidden="true"></i>
+                                Password</label>
                             <div class="auth-password-control">
-                                <input type="password" id="register-password" placeholder="At least 8 characters" required minlength="8" autocomplete="new-password" aria-describedby="register-password-help">
-                                <button type="button" class="auth-password-toggle" data-password-toggle="register-password" aria-label="Show password" aria-pressed="false">Show</button>
+                                <input type="password" id="register-password" placeholder="At least 8 characters"
+                                    required minlength="8" autocomplete="new-password"
+                                    aria-describedby="register-password-help">
+                                <button type="button" class="auth-password-toggle"
+                                    data-password-toggle="register-password" aria-label="Show password"
+                                    aria-pressed="false">Show</button>
                             </div>
                             <span class="auth-field-hint" id="register-password-help">Use at least 8 characters.</span>
                         </div>
-                        <div id="register-error" class="auth-error-msg hidden" role="alert" aria-live="assertive" style="display: none;"></div>
-                        <button type="submit" class="btn btn-gradient btn-auth-submit" data-auth-action>Create Account</button>
+                        <div id="register-error" class="auth-error-msg hidden" role="alert" aria-live="assertive"
+                            style="display: none;"></div>
+                        <button type="submit" class="btn btn-gradient btn-auth-submit" data-auth-action>Create
+                            Account</button>
                         <p style="text-align: center; margin-top: 12px; font-size: 0.85rem; color: #94a3b8;">
-                            Already have an account? <a href="javascript:void(0)" id="link-go-to-login" onclick="window.toggleAuthCard && window.toggleAuthCard(false)" style="color: #06b6d4; font-weight: 700; text-decoration: underline;">Sign In / Login</a>
+                            Already have an account? <a href="javascript:void(0)" id="link-go-to-login"
+                                onclick="window.toggleAuthCard && window.toggleAuthCard(false)"
+                                style="color: #06b6d4; font-weight: 700; text-decoration: underline;">Sign In /
+                                Login</a>
                         </p>
                     </form>
                 </div>
@@ -135,7 +180,8 @@
     </div>
 
     <!-- History Panel Overlay -->
-    <div id="history-overlay" class="history-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="history-title">
+    <div id="history-overlay" class="history-overlay hidden" role="dialog" aria-modal="true"
+        aria-labelledby="history-title">
         <div class="history-panel">
             <div class="history-header">
                 <div>
@@ -177,73 +223,8 @@
                 <p style="text-align: center; color: #888; margin-top: 20px;">No translation history yet.</p>
             </div>
             <div class="history-footer">
-                <button id="btn-clear-history" class="btn btn-outline" style="width: 100%;"><i class="fa-solid fa-trash"></i> Clear History</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- API Key & Compiler Settings Modal Overlay -->
-    <div id="api-overlay" class="api-overlay hidden" style="display: none;">
-        <div class="api-panel" style="max-height: 90vh; overflow-y: auto;">
-            <div class="api-header">
-                <h3><i class="fa-solid fa-sliders"></i> Cloud AI & Compiler Settings</h3>
-                <button id="btn-close-api" class="icon-btn"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <div class="api-body">
-                <p style="font-size: 0.9rem; color: var(--text-muted, #94a3b8); margin-bottom: 15px; line-height: 1.4;">
-                    Configure AI translation provider and code execution engine (Piston / Cloud Compiler / Local).
-                </p>
-
-                <h4 style="font-size: 0.95rem; margin-bottom: 10px; color: var(--primary-color); display: flex; align-items: center; gap: 6px;"><i class="fa-solid fa-brain"></i> AI Translation Engine</h4>
-                <div class="form-group" style="margin-bottom: 12px;">
-                    <label for="ai-provider" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 5px;">AI Provider</label>
-                    <select id="ai-provider" class="control-select" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--glass-border); background: var(--bg-color); color: var(--text-color);">
-                        <option value="gemini">Google Gemini (Recommended, Fast & Free)</option>
-                        <option value="groq">Groq (Ultra-fast, Llama 3.3)</option>
-                        <option value="openai">OpenAI (GPT-4o Mini / GPT-4o)</option>
-                        <option value="anthropic">Anthropic Claude</option>
-                        <option value="openrouter">OpenRouter</option>
-                    </select>
-                </div>
-                <div class="form-group" style="margin-bottom: 12px;">
-                    <label for="ai-api-key-1" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 5px;">AI API Keys (up to 3)</label>
-                    <input type="password" id="ai-api-key-1" autocomplete="off" placeholder="API key 1" style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid var(--glass-border); background: var(--bg-color); color: var(--text-color); font-size: 0.9rem; margin-bottom: 6px;">
-                    <input type="password" id="ai-api-key-2" autocomplete="off" placeholder="API key 2 (optional)" style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid var(--glass-border); background: var(--bg-color); color: var(--text-color); font-size: 0.9rem; margin-bottom: 6px;">
-                    <input type="password" id="ai-api-key-3" autocomplete="off" placeholder="API key 3 (optional)" style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid var(--glass-border); background: var(--bg-color); color: var(--text-color); font-size: 0.9rem;">
-                    <small style="display: block; margin-top: 6px; color: var(--text-muted, #94a3b8);">Keys stay in this browser. Leave all fields blank to keep saved keys; enter keys to replace the saved set. Translation tries the next key on quota, rate-limit, or key-authentication errors.</small>
-                </div>
-                <div class="form-group" style="margin-bottom: 15px;">
-                    <label for="ai-model" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 5px;">AI Model (Optional)</label>
-                    <input type="text" id="ai-model" placeholder="Leave empty for default (e.g. gemini-flash-latest)" style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid var(--glass-border); background: var(--bg-color); color: var(--text-color); font-size: 0.9rem;">
-                </div>
-
-                <hr style="border: 0; border-top: 1px solid var(--glass-border); margin: 15px 0;">
-
-                <h4 style="font-size: 0.95rem; margin-bottom: 10px; color: var(--primary-color); display: flex; align-items: center; gap: 6px;"><i class="fa-solid fa-play"></i> Code Execution Runner (Compiler API)</h4>
-                <div class="form-group" style="margin-bottom: 12px;">
-                    <label for="execution-runner" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 5px;">Default Runner</label>
-                    <select id="execution-runner" class="control-select" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--glass-border); background: var(--bg-color); color: var(--text-color);">
-                        <option value="piston">Piston & Cloud Compiler (Judge0 CE Fallback)</option>
-                        <option value="cloud">Cloud Compiler API (Judge0 CE Direct)</option>
-                        <option value="local">Local Native Compilers (GCC, Javac, Python)</option>
-                    </select>
-                </div>
-                <div class="form-group" style="margin-bottom: 12px;">
-                    <label for="piston-url" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 5px;">Custom Piston URL (Optional)</label>
-                    <input type="text" id="piston-url" placeholder="https://emkc.org/api/v2/piston/execute or self-hosted" style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid var(--glass-border); background: var(--bg-color); color: var(--text-color); font-size: 0.9rem;">
-                </div>
-                <div class="form-group" style="margin-bottom: 15px;">
-                    <label for="piston-key" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 5px;">Piston API Key (Optional)</label>
-                    <input type="password" id="piston-key" placeholder="Paste Piston key if using authenticated instance" style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid var(--glass-border); background: var(--bg-color); color: var(--text-color); font-size: 0.9rem;">
-                </div>
-
-                <div id="api-status-badge" style="font-size: 0.85rem; padding: 10px 12px; border-radius: 6px; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); margin-top: 10px;">
-                    Active AI: <strong id="api-status-text" style="color: var(--primary-color);">AST Compiler (Offline)</strong>
-                </div>
-            </div>
-            <div class="api-footer" style="padding: 15px 20px; border-top: 1px solid var(--glass-border); display: flex; gap: 10px;">
-                <button id="btn-save-api-key" class="btn btn-gradient" style="flex: 1;"><i class="fa-solid fa-floppy-disk"></i> Save Settings</button>
-                <button id="btn-remove-api-key" class="btn btn-outline" style="color: #ff6b6b; border-color: #ff6b6b;"><i class="fa-solid fa-trash"></i> Reset</button>
+                <button id="btn-clear-history" class="btn btn-outline" style="width: 100%;"><i
+                        class="fa-solid fa-trash"></i> Clear History</button>
             </div>
         </div>
     </div>
@@ -251,33 +232,54 @@
     <!-- Background Glyph Field -->
     <div class="glyph-field">
         <span class="glyph" style="left: 3%; font-size: 24px; animation-duration: 8s; animation-delay: -1s;">{ }</span>
-        <span class="glyph" style="left: 12%; font-size: 32px; animation-duration: 11s; animation-delay: -3s;">[ ]</span>
+        <span class="glyph" style="left: 12%; font-size: 32px; animation-duration: 11s; animation-delay: -3s;">[
+            ]</span>
         <span class="glyph" style="left: 22%; font-size: 20px; animation-duration: 7s; animation-delay: -5s;">( )</span>
-        <span class="glyph" style="left: 32%; font-size: 28px; animation-duration: 9s; animation-delay: -2s;">&lt; /&gt;</span>
-        <span class="glyph" style="left: 42%; font-size: 22px; animation-duration: 10s; animation-delay: -6s;">{ }</span>
-        <span class="glyph" style="left: 52%; font-size: 36px; animation-duration: 12s; animation-delay: -4s;">[ ]</span>
+        <span class="glyph" style="left: 32%; font-size: 28px; animation-duration: 9s; animation-delay: -2s;">&lt;
+            /&gt;</span>
+        <span class="glyph" style="left: 42%; font-size: 22px; animation-duration: 10s; animation-delay: -6s;">{
+            }</span>
+        <span class="glyph" style="left: 52%; font-size: 36px; animation-duration: 12s; animation-delay: -4s;">[
+            ]</span>
         <span class="glyph" style="left: 62%; font-size: 24px; animation-duration: 8s; animation-delay: -7s;">( )</span>
-        <span class="glyph" style="left: 72%; font-size: 30px; animation-duration: 10s; animation-delay: -1s;">&lt; &gt;</span>
+        <span class="glyph" style="left: 72%; font-size: 30px; animation-duration: 10s; animation-delay: -1s;">&lt;
+            &gt;</span>
         <span class="glyph" style="left: 82%; font-size: 26px; animation-duration: 9s; animation-delay: -5s;">{ }</span>
         <span class="glyph" style="left: 92%; font-size: 20px; animation-duration: 7s; animation-delay: -3s;">[ ]</span>
-        
-        <span class="glyph" style="left: 7%; font-size: 28px; animation-duration: 9s; animation-delay: -4s;">=&gt;</span>
-        <span class="glyph" style="left: 18%; font-size: 22px; animation-duration: 10s; animation-delay: -8s;">function()</span>
-        <span class="glyph" style="left: 28%; font-size: 25px; animation-duration: 8s; animation-delay: -2s;">if (x) { }</span>
-        <span class="glyph" style="left: 38%; font-size: 20px; animation-duration: 11s; animation-delay: -5s;">const [val]</span>
-        <span class="glyph" style="left: 48%; font-size: 30px; animation-duration: 10s; animation-delay: -3s;">class {}</span>
-        <span class="glyph" style="left: 58%; font-size: 22px; animation-duration: 7s; animation-delay: -6s;">import { }</span>
-        <span class="glyph" style="left: 68%; font-size: 26px; animation-duration: 9s; animation-delay: -1s;">return x;</span>
-        <span class="glyph" style="left: 78%; font-size: 24px; animation-duration: 8s; animation-delay: -7s;">} else {</span>
-        <span class="glyph" style="left: 88%; font-size: 28px; animation-duration: 11s; animation-delay: -4s;">let {a} =</span>
-        <span class="glyph" style="left: 96%; font-size: 18px; animation-duration: 8s; animation-delay: -2s;">(a, b)</span>
 
-        <span class="glyph" style="left: 10%; font-size: 22px; animation-duration: 10s; animation-delay: 0s;">{ ... }</span>
-        <span class="glyph" style="left: 25%; font-size: 26px; animation-duration: 8s; animation-delay: 1s;">[ ... ]</span>
-        <span class="glyph" style="left: 40%; font-size: 24px; animation-duration: 9s; animation-delay: 2s;">&lt;code&gt;</span>
-        <span class="glyph" style="left: 55%; font-size: 32px; animation-duration: 11s; animation-delay: 1.5s;">{ code }</span>
-        <span class="glyph" style="left: 70%; font-size: 20px; animation-duration: 7s; animation-delay: 0.5s;">(fn)</span>
-        <span class="glyph" style="left: 85%; font-size: 28px; animation-duration: 10s; animation-delay: 2.5s;">&lt;div&gt;</span>
+        <span class="glyph"
+            style="left: 7%; font-size: 28px; animation-duration: 9s; animation-delay: -4s;">=&gt;</span>
+        <span class="glyph"
+            style="left: 18%; font-size: 22px; animation-duration: 10s; animation-delay: -8s;">function()</span>
+        <span class="glyph" style="left: 28%; font-size: 25px; animation-duration: 8s; animation-delay: -2s;">if (x) {
+            }</span>
+        <span class="glyph" style="left: 38%; font-size: 20px; animation-duration: 11s; animation-delay: -5s;">const
+            [val]</span>
+        <span class="glyph" style="left: 48%; font-size: 30px; animation-duration: 10s; animation-delay: -3s;">class
+            {}</span>
+        <span class="glyph" style="left: 58%; font-size: 22px; animation-duration: 7s; animation-delay: -6s;">import {
+            }</span>
+        <span class="glyph" style="left: 68%; font-size: 26px; animation-duration: 9s; animation-delay: -1s;">return
+            x;</span>
+        <span class="glyph" style="left: 78%; font-size: 24px; animation-duration: 8s; animation-delay: -7s;">} else
+            {</span>
+        <span class="glyph" style="left: 88%; font-size: 28px; animation-duration: 11s; animation-delay: -4s;">let {a}
+            =</span>
+        <span class="glyph" style="left: 96%; font-size: 18px; animation-duration: 8s; animation-delay: -2s;">(a,
+            b)</span>
+
+        <span class="glyph" style="left: 10%; font-size: 22px; animation-duration: 10s; animation-delay: 0s;">{ ...
+            }</span>
+        <span class="glyph" style="left: 25%; font-size: 26px; animation-duration: 8s; animation-delay: 1s;">[ ...
+            ]</span>
+        <span class="glyph"
+            style="left: 40%; font-size: 24px; animation-duration: 9s; animation-delay: 2s;">&lt;code&gt;</span>
+        <span class="glyph" style="left: 55%; font-size: 32px; animation-duration: 11s; animation-delay: 1.5s;">{ code
+            }</span>
+        <span class="glyph"
+            style="left: 70%; font-size: 20px; animation-duration: 7s; animation-delay: 0.5s;">(fn)</span>
+        <span class="glyph"
+            style="left: 85%; font-size: 28px; animation-duration: 10s; animation-delay: 2.5s;">&lt;div&gt;</span>
     </div>
 
     <!-- Navigation Bar -->
@@ -295,20 +297,20 @@
             <li><a href="#team">Team</a></li>
         </ul>
         <div class="nav-actions">
-            <button id="btn-api-settings" class="icon-btn" type="button" title="AI API Settings" aria-label="AI API Settings" style="display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;">
-                <i class="fa-solid fa-key" aria-hidden="true"></i><span style="font-size: 0.78rem;">API Keys</span>
-            </button>
-            <button id="btn-history" class="icon-btn" title="Translation History"><i class="fa-solid fa-clock-rotate-left"></i></button>
+            <button id="btn-history" class="icon-btn" title="Translation History"><i
+                    class="fa-solid fa-clock-rotate-left"></i></button>
             <button id="theme-toggle" class="icon-btn"><i class="fa-solid fa-sun"></i></button>
 
             <!-- User Auth Controls -->
-            <button id="btn-open-auth" class="btn btn-gradient btn-auth-nav" style="padding: 7px 18px; font-size: 0.85rem; border-radius: 50px;">
+            <button id="btn-open-auth" class="btn btn-gradient btn-auth-nav"
+                style="padding: 7px 18px; font-size: 0.85rem; border-radius: 50px;">
                 <i class="fa-solid fa-user"></i> <span>Sign In</span>
             </button>
             <div id="user-profile-badge" class="user-profile-badge hidden" style="display: none;">
                 <img id="user-avatar" src="" alt="User" class="user-avatar-img">
                 <span id="user-display-name" class="user-name-text"></span>
-                <button id="btn-resend-verification" class="auth-text-button" type="button" style="display: none;">Verify email</button>
+                <button id="btn-resend-verification" class="auth-text-button" type="button"
+                    style="display: none;">Verify email</button>
                 <button id="btn-logout" class="btn-logout" type="button" title="Sign out">
                     <i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i>
                     <span>Sign out</span>
@@ -327,14 +329,22 @@
         <div class="hero-content">
             <h1 class="project-title">Syntax-to-Semantics Gap Prediction<br>& Code Translation</h1>
             <p class="hero-desc">
-                Translate <strong>Java, Python, and C</strong> with an AST-powered compiler. Check syntax, explore code insights, and review translated output in one workspace.
+                Translate <strong>Java, Python, and C</strong> with an AST-powered compiler. Check syntax, explore code
+                insights, and review translated output in one workspace.
             </p>
             <div class="typing-container">
                 <span id="typing-text"></span><span class="cursor">|</span>
             </div>
-            <div class="hero-buttons" style="display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; position: relative; z-index: 10;">
-                <a href="#demo" onclick="window.navigateToSection ? window.navigateToSection('demo') : null; return false;" class="btn btn-gradient btn-large">Start Translating <i class="fa-solid fa-arrow-right"></i></a>
-                <a href="#workflow" onclick="window.navigateToSection ? window.navigateToSection('workflow') : null; return false;" class="btn btn-outline btn-large" style="color: var(--text-color); border-color: var(--text-color);">See How it Works <i class="fa-solid fa-gears"></i></a>
+            <div class="hero-buttons"
+                style="display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; position: relative; z-index: 10;">
+                <a href="#demo"
+                    onclick="window.navigateToSection ? window.navigateToSection('demo') : null; return false;"
+                    class="btn btn-gradient btn-large">Start Translating <i class="fa-solid fa-arrow-right"></i></a>
+                <a href="#workflow"
+                    onclick="window.navigateToSection ? window.navigateToSection('workflow') : null; return false;"
+                    class="btn btn-outline btn-large"
+                    style="color: var(--text-color); border-color: var(--text-color);">See How it Works <i
+                        class="fa-solid fa-gears"></i></a>
             </div>
         </div>
     </header>
@@ -349,7 +359,8 @@
             <div class="feature-card glass-card">
                 <div class="feature-icon"><i class="fa-solid fa-language"></i></div>
                 <h3>Java • Python • C Translation Matrix</h3>
-                <p>Seamlessly convert code across Java, Python, and C while retaining identical logic and type safety.</p>
+                <p>Seamlessly convert code across Java, Python, and C while retaining identical logic and type safety.
+                </p>
             </div>
             <div class="feature-card glass-card">
                 <div class="feature-icon"><i class="fa-solid fa-bug"></i></div>
@@ -388,14 +399,18 @@
 
         <div class="demo-container glass-card" id="demo-studio-container">
             <!-- Active Development Notification Banner -->
-            <div id="dev-lang-banner" style="display: none; background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(234, 179, 8, 0.35); color: #fef08a; padding: 10px 18px; border-radius: 8px; margin: 12px 15px 0 15px; align-items: center; justify-content: space-between; font-size: 0.88rem; box-shadow: 0 4px 15px rgba(0,0,0,0.25);">
+            <div id="dev-lang-banner"
+                style="display: none; background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(234, 179, 8, 0.35); color: #fef08a; padding: 10px 18px; border-radius: 8px; margin: 12px 15px 0 15px; align-items: center; justify-content: space-between; font-size: 0.88rem; box-shadow: 0 4px 15px rgba(0,0,0,0.25);">
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <i class="fa-solid fa-person-digging" style="color: #fbbf24; font-size: 1.15rem;"></i>
-                    <span><strong>Under Active Development:</strong> We are currently working on C++ and JavaScript support. Full support is active for Java, Python, and C.</span>
+                    <span><strong>Under Active Development:</strong> We are currently working on C++ and JavaScript
+                        support. Full support is active for Java, Python, and C.</span>
                 </div>
-                <button type="button" id="btn-close-dev-banner" style="background: none; border: none; color: #fef08a; cursor: pointer; font-size: 1.1rem; padding: 2px 6px;"><i class="fa-solid fa-xmark"></i></button>
+                <button type="button" id="btn-close-dev-banner"
+                    style="background: none; border: none; color: #fef08a; cursor: pointer; font-size: 1.1rem; padding: 2px 6px;"><i
+                        class="fa-solid fa-xmark"></i></button>
             </div>
-            
+
             <div class="editor-layout">
                 <!-- Left Panel: Source -->
                 <div class="panel source-panel">
@@ -409,20 +424,30 @@
                             <option value="javascript">JavaScript (In Development)</option>
                         </select>
                         <div class="theme-toggle-editor icon-btn"><i class="fa-solid fa-palette"></i></div>
-                        <button type="button" id="btn-clear-source-mobile" class="mobile-source-clear mobile-only" title="Clear source and translated code" aria-label="Clear source and translated code">
+                        <button type="button" id="btn-clear-source-mobile" class="mobile-source-clear mobile-only"
+                            title="Clear source and translated code" aria-label="Clear source and translated code">
                             <i class="fa-solid fa-trash-can" aria-hidden="true"></i><span>Clear</span>
                         </button>
                     </div>
-                    <div class="lang-presets-bar" style="display: flex; gap: 8px; padding: 6px 15px; background: rgba(0,0,0,0.2); border-bottom: 1px solid rgba(255,255,255,0.05); align-items: center; flex-wrap: wrap;">
-                        <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Main Languages:</span>
-                        <button class="btn-preset-lang" data-lang="java" style="padding: 3px 10px; font-size: 0.75rem; border-radius: 12px; background: rgba(6, 182, 212, 0.15); color: var(--primary-color); border: 1px solid rgba(6, 182, 212, 0.3); cursor: pointer; font-weight: 600;"><i class="fa-brands fa-java"></i> Java</button>
-                        <button class="btn-preset-lang" data-lang="python" style="padding: 3px 10px; font-size: 0.75rem; border-radius: 12px; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); cursor: pointer; font-weight: 600;"><i class="fa-brands fa-python"></i> Python</button>
-                        <button class="btn-preset-lang" data-lang="c" style="padding: 3px 10px; font-size: 0.75rem; border-radius: 12px; background: rgba(234, 179, 8, 0.15); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.3); cursor: pointer; font-weight: 600;"><i class="fa-solid fa-c"></i> C</button>
+                    <div class="lang-presets-bar"
+                        style="display: flex; gap: 8px; padding: 6px 15px; background: rgba(0,0,0,0.2); border-bottom: 1px solid rgba(255,255,255,0.05); align-items: center; flex-wrap: wrap;">
+                        <span
+                            style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Main
+                            Languages:</span>
+                        <button class="btn-preset-lang" data-lang="java"
+                            style="padding: 3px 10px; font-size: 0.75rem; border-radius: 12px; background: rgba(6, 182, 212, 0.15); color: var(--primary-color); border: 1px solid rgba(6, 182, 212, 0.3); cursor: pointer; font-weight: 600;"><i
+                                class="fa-brands fa-java"></i> Java</button>
+                        <button class="btn-preset-lang" data-lang="python"
+                            style="padding: 3px 10px; font-size: 0.75rem; border-radius: 12px; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); cursor: pointer; font-weight: 600;"><i
+                                class="fa-brands fa-python"></i> Python</button>
+                        <button class="btn-preset-lang" data-lang="c"
+                            style="padding: 3px 10px; font-size: 0.75rem; border-radius: 12px; background: rgba(234, 179, 8, 0.15); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.3); cursor: pointer; font-weight: 600;"><i
+                                class="fa-solid fa-c"></i> C</button>
                     </div>
                     <div class="code-area-wrapper">
                         <div id="source-editor" class="monaco-container"></div>
                     </div>
-                    
+
                     <!-- Console Output -->
                     <div class="console-wrapper hidden" id="console-output-container">
                         <div class="console-header">
@@ -434,11 +459,14 @@
 
                     <div class="panel-actions" style="justify-content: space-between;">
                         <div style="display: flex; gap: 10px; align-items: center;">
-                            <button id="btn-analyze" class="btn btn-outline"><i class="fa-solid fa-magnifying-glass"></i> Analyze Code</button>
-                            <button id="btn-clear" class="btn btn-danger desktop-source-clear"><i class="fa-solid fa-trash-can"></i> Clear</button>
+                            <button id="btn-analyze" class="btn btn-outline"><i
+                                    class="fa-solid fa-magnifying-glass"></i> Analyze Code</button>
+                            <button id="btn-clear" class="btn btn-danger desktop-source-clear"><i
+                                    class="fa-solid fa-trash-can"></i> Clear</button>
                         </div>
                         <div style="display: flex; gap: 10px; align-items: center;">
-                            <button id="btn-translate" class="btn btn-gradient"><i class="fa-solid fa-wand-magic-sparkles"></i> Translate Code</button>
+                            <button id="btn-translate" class="btn btn-gradient"><i
+                                    class="fa-solid fa-wand-magic-sparkles"></i> Translate Code</button>
                         </div>
                     </div>
                 </div>
@@ -457,47 +485,72 @@
                     </div>
 
                     <div class="target-actions">
-                            
-                            <!-- Run Group -->
-                            <div class="action-group" style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
-                                <span style="font-size: 0.65rem; color: var(--success-color); text-shadow: 0 0 8px rgba(16,185,129,0.4); text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">Run</span>
-                                <button id="btn-run" class="icon-btn text-green" title="Run Code" style="background: rgba(16, 185, 129, 0.15); border-radius: 6px; padding: 6px 12px;"><i class="fa-solid fa-play"></i></button>
-                            </div>
-                            
-                            <!-- Analysis Group -->
-                            <div class="action-group desktop-only" style="display: flex; flex-direction: column; align-items: center; gap: 2px; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 15px;">
-                                <span style="font-size: 0.65rem; color: #eab308; text-shadow: 0 0 8px rgba(234,179,8,0.4); text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">Diff</span>
-                                <button id="btn-toggle-diff" class="icon-btn" title="Toggle Semantic Diff View"><i class="fa-solid fa-code-compare"></i></button>
-                            </div>
 
-                            <!-- IDEs Group -->
-                            <div class="action-group desktop-only" style="display: flex; flex-direction: column; align-items: center; gap: 2px; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 15px;">
-                                <span style="font-size: 0.65rem; color: var(--primary-color); text-shadow: 0 0 8px rgba(6,182,212,0.4); text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">IDEs</span>
-                                <div style="display: flex; gap: 5px;">
-                                    <button id="btn-vscode" class="icon-btn" title="Open translated code in VS Code (requires the Syn2Sem IDE helper)">
-                                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style="vertical-align: middle;"><path d="M23.15 2.587L18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"/></svg>
-                                    </button>
-                                    <button id="btn-antigravity" class="icon-btn" title="Open translated code in Antigravity IDE (requires the Syn2Sem IDE helper)">
-                                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style="vertical-align: middle;"><path d="M12 1L2 21h4.5l1.5-3h8l1.5 3H22L12 1zm-2.5 13L12 6l2.5 8h-5z"/><circle cx="12" cy="23" r="1.5" /></svg>
-                                    </button>
-                                </div>
-                            </div>
+                        <!-- Run Group -->
+                        <div class="action-group"
+                            style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
+                            <span
+                                style="font-size: 0.65rem; color: var(--success-color); text-shadow: 0 0 8px rgba(16,185,129,0.4); text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">Run</span>
+                            <button id="btn-run" class="icon-btn text-green" title="Run Code"
+                                style="background: rgba(16, 185, 129, 0.15); border-radius: 6px; padding: 6px 12px;"><i
+                                    class="fa-solid fa-play"></i></button>
+                        </div>
 
-                            <!-- Export Group -->
-                            <div class="action-group" style="display: flex; flex-direction: column; align-items: center; gap: 2px; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 15px;">
-                                <span style="font-size: 0.65rem; color: var(--accent-color); text-shadow: 0 0 8px rgba(217,70,239,0.4); text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">Export</span>
-                                <div style="display: flex; gap: 5px;">
-                                    <button id="btn-copy" class="icon-btn" title="Copy to Clipboard"><i class="fa-solid fa-copy"></i></button>
-                                    <button id="btn-download" class="icon-btn desktop-only" title="Export to Notepad (.txt)"><i class="fa-solid fa-file-lines"></i></button>
-                                    <button id="btn-download-pdf" class="icon-btn" title="Export to PDF"><i class="fa-solid fa-file-pdf"></i></button>
-                                </div>
-                            </div>
+                        <!-- Analysis Group -->
+                        <div class="action-group desktop-only"
+                            style="display: flex; flex-direction: column; align-items: center; gap: 2px; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 15px;">
+                            <span
+                                style="font-size: 0.65rem; color: #eab308; text-shadow: 0 0 8px rgba(234,179,8,0.4); text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">Diff</span>
+                            <button id="btn-toggle-diff" class="icon-btn" title="Toggle Semantic Diff View"><i
+                                    class="fa-solid fa-code-compare"></i></button>
+                        </div>
 
-                            <!-- Share Group (Mobile Only) -->
-                            <div class="action-group mobile-only" style="display: flex; flex-direction: column; align-items: center; gap: 2px; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 15px;">
-                                <span style="font-size: 0.65rem; color: var(--primary-color); text-shadow: 0 0 8px rgba(6,182,212,0.4); text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">Share</span>
-                                <button id="btn-share" class="icon-btn" title="Share Code"><i class="fa-solid fa-share-nodes"></i></button>
+                        <!-- IDEs Group -->
+                        <div class="action-group desktop-only"
+                            style="display: flex; flex-direction: column; align-items: center; gap: 2px; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 15px;">
+                            <span
+                                style="font-size: 0.65rem; color: var(--primary-color); text-shadow: 0 0 8px rgba(6,182,212,0.4); text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">IDEs</span>
+                            <div style="display: flex; gap: 5px;">
+                                <button id="btn-vscode" class="icon-btn" title="Open in VS Code">
+                                    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"
+                                        style="vertical-align: middle;">
+                                        <path
+                                            d="M23.15 2.587L18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z" />
+                                    </svg>
+                                </button>
+                                <button id="btn-antigravity" class="icon-btn" title="Open in Antigravity IDE">
+                                    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"
+                                        style="vertical-align: middle;">
+                                        <path d="M12 1L2 21h4.5l1.5-3h8l1.5 3H22L12 1zm-2.5 13L12 6l2.5 8h-5z" />
+                                        <circle cx="12" cy="23" r="1.5" />
+                                    </svg>
+                                </button>
                             </div>
+                        </div>
+
+                        <!-- Export Group -->
+                        <div class="action-group"
+                            style="display: flex; flex-direction: column; align-items: center; gap: 2px; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 15px;">
+                            <span
+                                style="font-size: 0.65rem; color: var(--accent-color); text-shadow: 0 0 8px rgba(217,70,239,0.4); text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">Export</span>
+                            <div style="display: flex; gap: 5px;">
+                                <button id="btn-copy" class="icon-btn" title="Copy to Clipboard"><i
+                                        class="fa-solid fa-copy"></i></button>
+                                <button id="btn-download" class="icon-btn desktop-only"
+                                    title="Open in Notepad (.txt)"><i class="fa-solid fa-file-lines"></i></button>
+                                <button id="btn-download-pdf" class="icon-btn" title="Export to PDF"><i
+                                        class="fa-solid fa-file-pdf"></i></button>
+                            </div>
+                        </div>
+
+                        <!-- Share Group (Mobile Only) -->
+                        <div class="action-group mobile-only"
+                            style="display: flex; flex-direction: column; align-items: center; gap: 2px; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 15px;">
+                            <span
+                                style="font-size: 0.65rem; color: var(--primary-color); text-shadow: 0 0 8px rgba(6,182,212,0.4); text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">Share</span>
+                            <button id="btn-share" class="icon-btn" title="Share Code"><i
+                                    class="fa-solid fa-share-nodes"></i></button>
+                        </div>
                     </div>
                     <div class="code-area-wrapper output-wrapper">
                         <!-- Loading Overlay -->
@@ -506,75 +559,79 @@
                             <p id="loading-text">Analyzing...</p>
                         </div>
                         <div id="target-editor" class="monaco-container"></div>
-                        <div id="diff-header" class="hidden" style="padding: 10px 15px; font-weight: bold; background: rgba(0,0,0,0.2); border-bottom: 1px solid rgba(255,255,255,0.1); color: var(--accent-color); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;"><i class="fa-solid fa-code-compare"></i> Semantic Diff View</div>
+                        <div id="diff-header" class="hidden"
+                            style="padding: 10px 15px; font-weight: bold; background: rgba(0,0,0,0.2); border-bottom: 1px solid rgba(255,255,255,0.1); color: var(--accent-color); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;">
+                            <i class="fa-solid fa-code-compare"></i> Semantic Diff View
+                        </div>
                         <div id="diff-editor" class="monaco-container hidden"></div>
                     </div>
-                    
-            </div>
-        </div>
-        
-        <!-- Dashboard Results (HUD) Full Width -->
-        <div class="hud-dashboard glass-card hidden" id="results-dashboard" style="margin: 40px 5%; padding: 30px; border-radius: 15px;">
-            <div class="hud-header">
-                <i class="fa-solid fa-chart-line"></i> Syn2Sem Analysis
-            </div>
-            
-            <!-- Top Row: Metrics -->
-            <div class="hud-grid-top">
-                <div class="hud-widget glow-cyan">
-                    <i class="fa-solid fa-bullseye hud-bg-icon"></i>
-                    <span class="hud-label">Similarity Score</span>
-                    <span class="hud-value text-cyan" id="res-score">-</span>
-                </div>
-                <div class="hud-widget glow-purple">
-                    <i class="fa-solid fa-stopwatch hud-bg-icon"></i>
-                    <span class="hud-label">Time Complexity</span>
-                    <span class="hud-value text-purple" id="res-time-complexity">-</span>
-                </div>
-                <div class="hud-widget glow-purple">
-                    <i class="fa-solid fa-memory hud-bg-icon"></i>
-                    <span class="hud-label">Space Complexity</span>
-                    <span class="hud-value text-purple" id="res-space-complexity">-</span>
-                </div>
-            </div>
-            
-            <!-- Middle Row: Status -->
-            <div class="hud-grid-middle">
-                <div class="hud-widget glow-green" id="hud-syntax-widget">
-                    <i class="fa-solid fa-bug hud-bg-icon"></i>
-                    <span class="hud-label">Syntax Errors</span>
-                    <span class="result-value text-green" id="res-syntax">-</span>
-                </div>
-                <div class="hud-widget glow-green" id="hud-status-widget">
-                    <i class="fa-solid fa-shield-halved hud-bg-icon"></i>
-                    <span class="hud-label">Translation Status</span>
-                    <span class="hud-value text-green" id="res-gap">-</span>
-                </div>
-                <div class="hud-widget glow-blue">
-                    <i class="fa-solid fa-check-double hud-bg-icon"></i>
-                    <span class="hud-label">Translation Confidence</span>
-                    <span class="hud-value text-blue" id="res-confidence">-</span>
+
                 </div>
             </div>
 
-            <!-- Bottom Row: Analysis -->
-            <div class="hud-grid-bottom">
-                <div class="hud-widget hud-large glow-blue">
-                    <i class="fa-solid fa-robot hud-bg-icon"></i>
-                    <span class="hud-label">AI Suggestions</span>
-                    <ul class="suggestion-list" id="res-suggestions">
-                        <li>-</li>
-                    </ul>
+            <!-- Dashboard Results (HUD) Full Width -->
+            <div class="hud-dashboard glass-card hidden" id="results-dashboard"
+                style="margin: 40px 5%; padding: 30px; border-radius: 15px;">
+                <div class="hud-header">
+                    <i class="fa-solid fa-chart-line"></i> Syn2Sem Analysis
                 </div>
-                <div class="hud-widget hud-large glow-cyan">
-                    <i class="fa-solid fa-network-wired hud-bg-icon"></i>
-                    <span class="hud-label">Semantic Logic Breakdown</span>
-                    <ul class="suggestion-list" id="res-logic-breakdown">
-                        <li>-</li>
-                    </ul>
+
+                <!-- Top Row: Metrics -->
+                <div class="hud-grid-top">
+                    <div class="hud-widget glow-cyan">
+                        <i class="fa-solid fa-bullseye hud-bg-icon"></i>
+                        <span class="hud-label">Similarity Score</span>
+                        <span class="hud-value text-cyan" id="res-score">-</span>
+                    </div>
+                    <div class="hud-widget glow-purple">
+                        <i class="fa-solid fa-stopwatch hud-bg-icon"></i>
+                        <span class="hud-label">Time Complexity</span>
+                        <span class="hud-value text-purple" id="res-time-complexity">-</span>
+                    </div>
+                    <div class="hud-widget glow-purple">
+                        <i class="fa-solid fa-memory hud-bg-icon"></i>
+                        <span class="hud-label">Space Complexity</span>
+                        <span class="hud-value text-purple" id="res-space-complexity">-</span>
+                    </div>
+                </div>
+
+                <!-- Middle Row: Status -->
+                <div class="hud-grid-middle">
+                    <div class="hud-widget glow-green" id="hud-syntax-widget">
+                        <i class="fa-solid fa-bug hud-bg-icon"></i>
+                        <span class="hud-label">Syntax Errors</span>
+                        <span class="result-value text-green" id="res-syntax">-</span>
+                    </div>
+                    <div class="hud-widget glow-green" id="hud-status-widget">
+                        <i class="fa-solid fa-shield-halved hud-bg-icon"></i>
+                        <span class="hud-label">Translation Status</span>
+                        <span class="hud-value text-green" id="res-gap">-</span>
+                    </div>
+                    <div class="hud-widget glow-blue">
+                        <i class="fa-solid fa-check-double hud-bg-icon"></i>
+                        <span class="hud-label">Translation Confidence</span>
+                        <span class="hud-value text-blue" id="res-confidence">-</span>
+                    </div>
+                </div>
+
+                <!-- Bottom Row: Analysis -->
+                <div class="hud-grid-bottom">
+                    <div class="hud-widget hud-large glow-blue">
+                        <i class="fa-solid fa-robot hud-bg-icon"></i>
+                        <span class="hud-label">AI Suggestions</span>
+                        <ul class="suggestion-list" id="res-suggestions">
+                            <li>-</li>
+                        </ul>
+                    </div>
+                    <div class="hud-widget hud-large glow-cyan">
+                        <i class="fa-solid fa-network-wired hud-bg-icon"></i>
+                        <span class="hud-label">Semantic Logic Breakdown</span>
+                        <ul class="suggestion-list" id="res-logic-breakdown">
+                            <li>-</li>
+                        </ul>
+                    </div>
                 </div>
             </div>
-        </div>
     </section>
 
     <!-- Workflow Section -->
@@ -589,29 +646,33 @@
                 <h4>1. User Code</h4>
                 <p class="flow-desc">The user types their code and chooses the languages.</p>
             </div>
-            <div class="flow-arrow slide-up"><i class="fa-solid fa-arrow-right"></i><i class="fa-solid fa-arrow-down mobile-arrow"></i></div>
-            
+            <div class="flow-arrow slide-up"><i class="fa-solid fa-arrow-right"></i><i
+                    class="fa-solid fa-arrow-down mobile-arrow"></i></div>
+
             <div class="flow-step slide-up">
                 <div class="flow-icon"><i class="fa-solid fa-magnifying-glass-chart"></i></div>
                 <h4>2. Syntax Analysis</h4>
                 <p class="flow-desc">The system checks the code to make sure there are no typing errors.</p>
             </div>
-            <div class="flow-arrow slide-up"><i class="fa-solid fa-arrow-right"></i><i class="fa-solid fa-arrow-down mobile-arrow"></i></div>
-            
+            <div class="flow-arrow slide-up"><i class="fa-solid fa-arrow-right"></i><i
+                    class="fa-solid fa-arrow-down mobile-arrow"></i></div>
+
             <div class="flow-step slide-up">
                 <div class="flow-icon"><i class="fa-solid fa-brain"></i></div>
                 <h4>3. Semantic Gap Prediction</h4>
                 <p class="flow-desc">The system looks for hidden logic risks before translating.</p>
             </div>
-            <div class="flow-arrow slide-up"><i class="fa-solid fa-arrow-right"></i><i class="fa-solid fa-arrow-down mobile-arrow"></i></div>
-            
+            <div class="flow-arrow slide-up"><i class="fa-solid fa-arrow-right"></i><i
+                    class="fa-solid fa-arrow-down mobile-arrow"></i></div>
+
             <div class="flow-step slide-up">
                 <div class="flow-icon"><i class="fa-solid fa-microchip"></i></div>
                 <h4>4. Translation Engine</h4>
                 <p class="flow-desc">The engine safely translates the code into the new language.</p>
             </div>
-            <div class="flow-arrow slide-up"><i class="fa-solid fa-arrow-right"></i><i class="fa-solid fa-arrow-down mobile-arrow"></i></div>
-            
+            <div class="flow-arrow slide-up"><i class="fa-solid fa-arrow-right"></i><i
+                    class="fa-solid fa-arrow-down mobile-arrow"></i></div>
+
             <div class="flow-step slide-up">
                 <div class="flow-icon"><i class="fa-solid fa-laptop-code"></i></div>
                 <h4>5. Optimized Output Code</h4>
@@ -663,7 +724,8 @@
         </div>
         <div class="about-content glass-card">
             <p>
-                Syn2Sem translates code between Java, Python, and C while aiming to keep its behavior the same. It checks for common translation issues before using AI, then reviews the translated code for errors.
+                Syn2Sem translates code between Java, Python, and C while aiming to keep its behavior the same. It
+                checks for common translation issues before using AI, then reviews the translated code for errors.
             </p>
         </div>
     </section>
@@ -677,18 +739,25 @@
         <div class="team-container">
             <div class="team-group">
                 <h3 class="group-title">Project Guides</h3>
-                <div class="team-members-grid" style="display: flex; justify-content: center; gap: 30px; flex-wrap: wrap;">
+                <div class="team-members-grid"
+                    style="display: flex; justify-content: center; gap: 30px; flex-wrap: wrap;">
                     <div class="team-card glass-card">
-                        <div class="avatar"><img src="https://ui-avatars.com/api/?name=Pratibha+Pujari&background=0D8ABC&color=fff" alt="Prof. Pratibha Pujari" /></div>
+                        <div class="avatar"><img
+                                src="https://ui-avatars.com/api/?name=Pratibha+Pujari&background=0D8ABC&color=fff"
+                                alt="Prof. Pratibha Pujari" /></div>
                         <h4>Prof. Pratibha Pujari</h4>
                         <div class="usn-badge">Guide</div>
-                        <p style="margin-top: 15px; color: var(--text-muted); font-size: 0.95rem;">Assistant Professor</p>
+                        <p style="margin-top: 15px; color: var(--text-muted); font-size: 0.95rem;">Assistant Professor
+                        </p>
                     </div>
                     <div class="team-card glass-card">
-                        <div class="avatar"><img src="https://ui-avatars.com/api/?name=Vrinda+Shetty&background=0D8ABC&color=fff" alt="Dr. Vrinda Shetty" /></div>
+                        <div class="avatar"><img
+                                src="https://ui-avatars.com/api/?name=Vrinda+Shetty&background=0D8ABC&color=fff"
+                                alt="Dr. Vrinda Shetty" /></div>
                         <h4>Dr. Vrinda Shetty</h4>
                         <div class="usn-badge">Co-Guide</div>
-                        <p style="margin-top: 15px; color: var(--text-muted); font-size: 0.95rem;">Professor & Dean-Academics</p>
+                        <p style="margin-top: 15px; color: var(--text-muted); font-size: 0.95rem;">Professor &
+                            Dean-Academics</p>
                     </div>
                 </div>
             </div>
@@ -696,39 +765,63 @@
                 <h3 class="group-title">Team Members</h3>
                 <div class="team-members-grid">
                     <div class="team-card glass-card">
-                        <div class="avatar"><img src="https://ui-avatars.com/api/?name=PRAVEEN+HS&background=0D8ABC&color=fff" alt="PRAVEEN HS" /></div>
+                        <div class="avatar"><img
+                                src="https://ui-avatars.com/api/?name=PRAVEEN+HS&background=0D8ABC&color=fff"
+                                alt="PRAVEEN HS" /></div>
                         <h4>PRAVEEN HS</h4>
                         <div class="usn-badge">1VA23IS072</div>
                         <div class="team-social">
-                            <a href="https://mail.google.com/mail/?view=cm&fs=1&to=Praveenhs.23is@saividya.ac.in" target="_blank" rel="noopener noreferrer" class="team-social-icon email-link" title="Email"><i class="fa-solid fa-envelope"></i></a>
-                            <a href="https://www.linkedin.com/in/praveen-h-s-799323306" target="_blank" rel="noopener noreferrer" class="team-social-icon linkedin-link" title="LinkedIn"><i class="fa-brands fa-linkedin"></i></a>
+                            <a href="https://mail.google.com/mail/?view=cm&fs=1&to=Praveenhs.23is@saividya.ac.in"
+                                target="_blank" rel="noopener noreferrer" class="team-social-icon email-link"
+                                title="Email"><i class="fa-solid fa-envelope"></i></a>
+                            <a href="https://www.linkedin.com/in/praveen-h-s-799323306" target="_blank"
+                                rel="noopener noreferrer" class="team-social-icon linkedin-link" title="LinkedIn"><i
+                                    class="fa-brands fa-linkedin"></i></a>
                         </div>
                     </div>
                     <div class="team-card glass-card">
-                        <div class="avatar"><img src="https://ui-avatars.com/api/?name=ULLAS+JAIN+MS&background=0D8ABC&color=fff" alt="ULLAS JAIN MS" /></div>
+                        <div class="avatar"><img
+                                src="https://ui-avatars.com/api/?name=ULLAS+JAIN+MS&background=0D8ABC&color=fff"
+                                alt="ULLAS JAIN MS" /></div>
                         <h4>ULLAS JAIN MS</h4>
                         <div class="usn-badge">1VA23IS113</div>
                         <div class="team-social">
-                            <a href="https://mail.google.com/mail/?view=cm&fs=1&to=ullasjainms.23is@saividya.ac.in" target="_blank" rel="noopener noreferrer" class="team-social-icon email-link" title="Email"><i class="fa-solid fa-envelope"></i></a>
-                            <a href="https://www.linkedin.com/in/ullas-jain-ms" target="_blank" rel="noopener noreferrer" class="team-social-icon linkedin-link" title="LinkedIn"><i class="fa-brands fa-linkedin"></i></a>
+                            <a href="https://mail.google.com/mail/?view=cm&fs=1&to=ullasjainms.23is@saividya.ac.in"
+                                target="_blank" rel="noopener noreferrer" class="team-social-icon email-link"
+                                title="Email"><i class="fa-solid fa-envelope"></i></a>
+                            <a href="https://www.linkedin.com/in/ullas-jain-ms" target="_blank"
+                                rel="noopener noreferrer" class="team-social-icon linkedin-link" title="LinkedIn"><i
+                                    class="fa-brands fa-linkedin"></i></a>
                         </div>
                     </div>
                     <div class="team-card glass-card">
-                        <div class="avatar"><img src="https://ui-avatars.com/api/?name=VIJAY+KUMAR+A&background=0D8ABC&color=fff" alt="VIJAY KUMAR A" /></div>
+                        <div class="avatar"><img
+                                src="https://ui-avatars.com/api/?name=VIJAY+KUMAR+A&background=0D8ABC&color=fff"
+                                alt="VIJAY KUMAR A" /></div>
                         <h4>VIJAY KUMAR A</h4>
                         <div class="usn-badge">1VA23IS118</div>
                         <div class="team-social">
-                            <a href="https://mail.google.com/mail/?view=cm&fs=1&to=vijaykumara.23is@saividya.ac.in" target="_blank" rel="noopener noreferrer" class="team-social-icon email-link" title="Email"><i class="fa-solid fa-envelope"></i></a>
-                            <a href="https://www.linkedin.com/in/vijay-kumar-a-423914324" target="_blank" rel="noopener noreferrer" class="team-social-icon linkedin-link" title="LinkedIn"><i class="fa-brands fa-linkedin"></i></a>
+                            <a href="https://mail.google.com/mail/?view=cm&fs=1&to=vijaykumara.23is@saividya.ac.in"
+                                target="_blank" rel="noopener noreferrer" class="team-social-icon email-link"
+                                title="Email"><i class="fa-solid fa-envelope"></i></a>
+                            <a href="https://www.linkedin.com/in/vijay-kumar-a-423914324" target="_blank"
+                                rel="noopener noreferrer" class="team-social-icon linkedin-link" title="LinkedIn"><i
+                                    class="fa-brands fa-linkedin"></i></a>
                         </div>
                     </div>
                     <div class="team-card glass-card">
-                        <div class="avatar"><img src="https://ui-avatars.com/api/?name=NANDISH+K&background=0D8ABC&color=fff" alt="NANDISH K" /></div>
+                        <div class="avatar"><img
+                                src="https://ui-avatars.com/api/?name=NANDISH+K&background=0D8ABC&color=fff"
+                                alt="NANDISH K" /></div>
                         <h4>NANDISH K</h4>
                         <div class="usn-badge">1VA24IS400</div>
                         <div class="team-social">
-                            <a href="https://mail.google.com/mail/?view=cm&fs=1&to=nandishr.24is@saividya.ac.in" target="_blank" rel="noopener noreferrer" class="team-social-icon email-link" title="Email"><i class="fa-solid fa-envelope"></i></a>
-                            <a href="https://www.linkedin.com/in/nandish-k-632b93288?utm_source=share_via&utm_content=profile&utm_medium=member_android" target="_blank" rel="noopener noreferrer" class="team-social-icon linkedin-link" title="LinkedIn"><i class="fa-brands fa-linkedin"></i></a>
+                            <a href="https://mail.google.com/mail/?view=cm&fs=1&to=nandishr.24is@saividya.ac.in"
+                                target="_blank" rel="noopener noreferrer" class="team-social-icon email-link"
+                                title="Email"><i class="fa-solid fa-envelope"></i></a>
+                            <a href="https://www.linkedin.com/in/nandish-k-632b93288?utm_source=share_via&utm_content=profile&utm_medium=member_android"
+                                target="_blank" rel="noopener noreferrer" class="team-social-icon linkedin-link"
+                                title="LinkedIn"><i class="fa-brands fa-linkedin"></i></a>
                         </div>
                     </div>
                 </div>
@@ -752,6 +845,7 @@
     <!-- jsPDF for PDF export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js"></script>
-    <script src="script.js?v=9.6"></script>
+    <script src="script.js?v=13.0"></script>
 </body>
+
 </html>

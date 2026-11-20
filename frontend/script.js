@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // === 1. Navbar & Mobile Menu ===
     const hamburger = document.querySelector('.hamburger');
     const navLinks = document.querySelector('.nav-links');
-    
+
     hamburger.addEventListener('click', () => {
         navLinks.classList.toggle('active');
         const icon = hamburger.querySelector('i');
@@ -102,7 +102,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // === 2. Dark/Light Theme Toggle ===
     const themeToggleBtn = document.getElementById('theme-toggle');
     const body = document.body;
-    
+
     // Check local storage for theme
     const currentTheme = localStorage.getItem('theme');
     if (currentTheme === 'light') {
@@ -155,7 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
                 entry.target.classList.add('visible');
-                
+
                 // If it's a stat number, trigger count animation
                 if (entry.target.classList.contains('stat-number') && !entry.target.classList.contains('counted')) {
                     animateValue(entry.target);
@@ -179,10 +179,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const step = (timestamp) => {
             if (!startTimestamp) startTimestamp = timestamp;
             const progress = Math.min((timestamp - startTimestamp) / duration, 1);
-            
+
             // Ease out cubic
             const easeProgress = 1 - Math.pow(1 - progress, 3);
-            
+
             let current = easeProgress * target;
             if (isFloat) {
                 obj.innerHTML = current.toFixed(1);
@@ -216,13 +216,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // FIREBASE AUTHENTICATION & PER-USER TRANSLATION HISTORY
     // ==========================================================
     const firebaseConfig = {
-        apiKey: "AIzaSyDKNJ1w9aexAiv0ufTLkXTxbvH4OOFpXSE",
-        authDomain: "syn2sem.firebaseapp.com",
-        projectId: "syn2sem",
-        storageBucket: "syn2sem.firebasestorage.app",
-        messagingSenderId: "802073827923",
-        appId: "1:802073827923:web:190b2ca57a5e8bc62e04a6",
-        measurementId: "G-8JRS67RW5H"
+        apiKey: "AIzaSyD6aLkv73ECWZ9pT0sqcUSCCI5kINsmIBU",
+        authDomain: "syn2sem-5d2a1.firebaseapp.com",
+        projectId: "syn2sem-5d2a1",
+        storageBucket: "syn2sem-5d2a1.firebasestorage.app",
+        messagingSenderId: "7532712630",
+        appId: "1:7532712630:web:fe2546726e680ebb560c17",
+        measurementId: "G-WLYCSW5V8G"
     };
 
     let fbAuth = null;
@@ -359,7 +359,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Globally accessible sliding toggle
-    window.toggleAuthCard = function(toRegister) {
+    window.toggleAuthCard = function (toRegister) {
         if (!authCard) return;
         if (typeof toRegister === 'boolean') {
             if (toRegister) {
@@ -1021,544 +1021,385 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     // --- End History & Auth Logic ---
 
-    // --- API Key & Cloud AI Settings Logic ---
-    const apiOverlay = document.getElementById('api-overlay');
-    const btnApiSettings = document.getElementById('btn-api-settings');
-    const btnCloseApi = document.getElementById('btn-close-api');
-    const btnSaveApiKey = document.getElementById('btn-save-api-key');
-    const btnRemoveApiKey = document.getElementById('btn-remove-api-key');
-    const selectAiProvider = document.getElementById('ai-provider');
-    const inputAiApiKeys = [
-        document.getElementById('ai-api-key-1'),
-        document.getElementById('ai-api-key-2'),
-        document.getElementById('ai-api-key-3')
-    ];
-    const inputAiModel = document.getElementById('ai-model');
-    const selectExecutionRunner = document.getElementById('execution-runner');
-    const inputPistonUrl = document.getElementById('piston-url');
-    const inputPistonKey = document.getElementById('piston-key');
-    const apiStatusText = document.getElementById('api-status-text');
-    const savedAiSettingsKey = 'syn2sem.aiSettings';
-
-    function readSavedAiSettings() {
-        try {
-            const saved = JSON.parse(localStorage.getItem(savedAiSettingsKey) || '{}');
-            const apiKeys = Array.isArray(saved.apiKeys)
-                ? saved.apiKeys.filter(key => typeof key === 'string' && key.trim())
-                : (typeof saved.apiKey === 'string' && saved.apiKey.trim() ? [saved.apiKey] : []);
-            return {
-                apiKeys,
-                provider: typeof saved.provider === 'string' ? saved.provider : '',
-                model: typeof saved.model === 'string' ? saved.model : '',
-                runner: typeof saved.runner === 'string' ? saved.runner : '',
-                pistonUrl: typeof saved.pistonUrl === 'string' ? saved.pistonUrl : '',
-                pistonKey: typeof saved.pistonKey === 'string' ? saved.pistonKey : ''
-            };
-        } catch (error) {
-            console.warn('Could not read saved AI settings from this browser:', error);
-            return { apiKeys: [], provider: '', model: '', runner: '', pistonUrl: '', pistonKey: '' };
-        }
-    }
-
-    async function checkApiConfig() {
-        try {
-            const res = await fetch('/api-config');
-            if (res.ok) {
-                const data = await res.json();
-                const saved = readSavedAiSettings();
-                const provider = saved.provider || data.provider;
-                const model = saved.model || data.model;
-                if (saved.apiKeys.length) {
-                    if (apiStatusText) {
-                        const count = saved.apiKeys.length;
-                        apiStatusText.textContent = `${count} API key${count === 1 ? '' : 's'} saved in this browser (${String(provider || 'AI').toUpperCase()}); automatic failover enabled.`;
-                    }
-                } else if (data.configured) {
-                    if (apiStatusText) apiStatusText.textContent = `A server-side ${String(data.provider || 'AI').toUpperCase()} key is configured.`;
-                } else {
-                    if (apiStatusText) apiStatusText.innerHTML = `<span style="color: #94a3b8;">AST Compiler (Offline mode)</span>`;
-                }
-                if (provider && selectAiProvider) selectAiProvider.value = provider;
-                if (model && model !== 'none' && inputAiModel) inputAiModel.value = model;
-
-                if (selectExecutionRunner && (saved.runner || data.runner)) {
-                    selectExecutionRunner.value = saved.runner || data.runner;
-                }
-                if (inputPistonUrl && (saved.pistonUrl || data.pistonUrl)) {
-                    inputPistonUrl.value = saved.pistonUrl || data.pistonUrl;
-                }
-            }
-        } catch (e) {
-            if (apiStatusText) apiStatusText.textContent = 'AST Compiler (Offline mode)';
-        }
-    }
-
-    if (btnApiSettings) {
-        btnApiSettings.addEventListener('click', () => {
-            checkApiConfig();
-            if (apiOverlay) apiOverlay.classList.remove('hidden');
-        });
-    }
-    if (btnCloseApi) {
-        btnCloseApi.addEventListener('click', () => {
-            if (apiOverlay) apiOverlay.classList.add('hidden');
-        });
-    }
-    if (apiOverlay) {
-        apiOverlay.addEventListener('click', (e) => {
-            if (e.target === apiOverlay) apiOverlay.classList.add('hidden');
-        });
-    }
-
-    if (btnSaveApiKey) {
-        btnSaveApiKey.addEventListener('click', async () => {
-            const enteredApiKeys = inputAiApiKeys
-                .map(input => (input ? input.value : '').trim())
-                .filter(Boolean);
-            const provider = selectAiProvider ? selectAiProvider.value : 'gemini';
-            const model = (inputAiModel.value || '').trim();
-            const runner = selectExecutionRunner ? selectExecutionRunner.value : 'piston';
-            const pistonUrl = (inputPistonUrl ? inputPistonUrl.value : '').trim();
-            const pistonKey = (inputPistonKey ? inputPistonKey.value : '').trim();
-            const existingAiSettings = readSavedAiSettings();
-            const apiKeys = enteredApiKeys.length ? enteredApiKeys : existingAiSettings.apiKeys;
-            const savedPistonKey = pistonKey || existingAiSettings.pistonKey;
-
-            const payload = {
-                runner,
-                provider
-            };
-            if (model) payload.model = model;
-            if (pistonUrl !== undefined) payload.pistonUrl = pistonUrl;
-            if (savedPistonKey) payload.pistonKey = savedPistonKey;
-
-            try {
-                localStorage.setItem(savedAiSettingsKey, JSON.stringify({
-                    apiKeys,
-                    provider,
-                    model,
-                    runner,
-                    pistonUrl,
-                    pistonKey: savedPistonKey
-                }));
-                const res = await fetch('/set-api-key', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                if (res.ok) {
-                    showToast(`Settings saved! Runner: ${runner.toUpperCase()}`);
-                    inputAiApiKeys.forEach(input => { if (input) input.value = ''; });
-                    checkApiConfig();
-                    setTimeout(() => { if (apiOverlay) apiOverlay.classList.add('hidden'); }, 600);
-                } else {
-                    alert('Failed to save settings.');
-                }
-            } catch (err) {
-                alert('Failed to connect to server to save settings.');
-            }
-        });
-    }
-
-    if (btnRemoveApiKey) {
-        btnRemoveApiKey.addEventListener('click', async () => {
-            try {
-                localStorage.removeItem(savedAiSettingsKey);
-                await fetch('/set-api-key', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ apiKey: '', provider: '', model: '', runner: 'piston', pistonUrl: '', pistonKey: '' })
-                });
-                inputAiApiKeys.forEach(input => { if (input) input.value = ''; });
-                if (inputAiModel) inputAiModel.value = '';
-                if (inputPistonUrl) inputPistonUrl.value = '';
-                if (inputPistonKey) inputPistonKey.value = '';
-                showToast('Settings reset to default.');
-                checkApiConfig();
-            } catch (e) {}
-        });
-    }
-
-    checkApiConfig();
-    // --- End API Key Logic ---
+    localStorage.removeItem('syn2sem.aiSettings');
 
     // Load Monaco Editor
-    require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.41.0/min/vs' }});
-    require(['vs/editor/editor.main'], function() {
+    require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.41.0/min/vs' } });
+    require(['vs/editor/editor.main'], function () {
         try {
-        
-        sourceEditor = monaco.editor.create(document.getElementById('source-editor'), {
-            value: `public class Demo{\n  public static void main(String args[]){\n    System.out.println("Hello");\n  }\n}`,
-            language: 'java',
-            theme: 'vs-dark',
-            automaticLayout: true,
-            minimap: { enabled: false },
-            fontSize: 14,
-            scrollbar: {
-                alwaysConsumeOnTouch: false
-            }
-        });
-        
-        // Auto Detect Language Helper Function
-        function autoDetectLanguage(code) {
-            if (!code || code.trim().length < 5) return null;
-            const text = code.trim();
 
-            if (text.includes('public class') || text.includes('public static void main') || text.includes('System.out.print') || text.includes('Scanner ')) {
-                return 'java';
-            }
-            if (text.includes('#include <iostream>') || text.includes('std::cout') || text.includes('std::cin') || text.includes('std::endl') || text.includes('using namespace std')) {
-                return 'cpp';
-            }
-            if (text.includes('#include <stdio.h>') || text.includes('printf(') || text.includes('scanf(') || text.includes('#include <stdlib.h>')) {
-                return 'c';
-            }
-            if (text.includes('def ') || text.includes('elif ') || (text.includes('print(') && !text.includes(';') && !text.includes('{')) || (text.includes(':') && !text.includes('{') && !text.includes(';'))) {
-                return 'python';
-            }
-            if (text.includes('console.log') || text.includes('let ') || text.includes('const ') || text.includes('function ') || text.includes('=>')) {
-                return 'javascript';
-            }
-            return null;
-        }
-
-        // Clear syntax markers when user starts typing, sync diff editor, auto-detect language & auto-analyze
-        let autoDetectTimeout = null;
-        sourceEditor.onDidChangeModelContent(() => {
-            if (window.errorDecorations) window.errorDecorations.clear();
-            if (isDiffView && diffEditor) {
-                const models = diffEditor.getModel();
-                if (models && models.original) {
-                    models.original.setValue(sourceEditor.getValue());
+            sourceEditor = monaco.editor.create(document.getElementById('source-editor'), {
+                value: `public class Demo{\n  public static void main(String args[]){\n    System.out.println("Hello");\n  }\n}`,
+                language: 'java',
+                theme: 'vs-dark',
+                automaticLayout: true,
+                minimap: { enabled: false },
+                fontSize: 14,
+                scrollbar: {
+                    alwaysConsumeOnTouch: false
                 }
+            });
+
+            // Auto Detect Language Helper Function
+            function autoDetectLanguage(code) {
+                if (!code || code.trim().length < 5) return null;
+                const text = code.trim();
+
+                if (text.includes('public class') || text.includes('public static void main') || text.includes('System.out.print') || text.includes('Scanner ')) {
+                    return 'java';
+                }
+                if (text.includes('#include <iostream>') || text.includes('std::cout') || text.includes('std::cin') || text.includes('std::endl') || text.includes('using namespace std')) {
+                    return 'cpp';
+                }
+                if (text.includes('#include <stdio.h>') || text.includes('printf(') || text.includes('scanf(') || text.includes('#include <stdlib.h>')) {
+                    return 'c';
+                }
+                if (text.includes('def ') || text.includes('elif ') || (text.includes('print(') && !text.includes(';') && !text.includes('{')) || (text.includes(':') && !text.includes('{') && !text.includes(';'))) {
+                    return 'python';
+                }
+                if (text.includes('console.log') || text.includes('let ') || text.includes('const ') || text.includes('function ') || text.includes('=>')) {
+                    return 'javascript';
+                }
+                return null;
             }
 
-            clearTimeout(autoDetectTimeout);
-            autoDetectTimeout = setTimeout(() => {
-                const code = sourceEditor.getValue();
-                const detected = autoDetectLanguage(code);
-                if (detected && detected !== sourceLang.value) {
-                    sourceLang.value = detected;
-                    monaco.editor.setModelLanguage(sourceEditor.getModel(), detected);
-                    showToast(`Auto-Detected Source Language: ${detected.toUpperCase()}`);
-                }
-                
-                // Auto-trigger analysis when code is pasted or typed
-                if (code.trim().length > 5) {
-                    const btnAnalyze = document.getElementById('btn-analyze');
-                    if (btnAnalyze) {
-                        // Show a small indication that it's analyzing
-                        btnAnalyze.click();
+            // Clear syntax markers when user starts typing, sync diff editor, auto-detect language & auto-analyze
+            let autoDetectTimeout = null;
+            sourceEditor.onDidChangeModelContent(() => {
+                if (window.errorDecorations) window.errorDecorations.clear();
+                if (isDiffView && diffEditor) {
+                    const models = diffEditor.getModel();
+                    if (models && models.original) {
+                        models.original.setValue(sourceEditor.getValue());
                     }
                 }
-            }, 800);
-        });
 
-        targetEditor = monaco.editor.create(targetEditorContainer, {
-            value: '',
-            language: 'python',
-            theme: 'vs-dark',
-            automaticLayout: true,
-            readOnly: true,
-            domReadOnly: true,
-            minimap: { enabled: false },
-            fontSize: 14,
-            scrollbar: {
-                alwaysConsumeOnTouch: false
-            }
-        });
+                clearTimeout(autoDetectTimeout);
+                autoDetectTimeout = setTimeout(() => {
+                    const code = sourceEditor.getValue();
+                    const detected = autoDetectLanguage(code);
+                    if (detected && detected !== sourceLang.value) {
+                        sourceLang.value = detected;
+                        monaco.editor.setModelLanguage(sourceEditor.getModel(), detected);
+                        showToast(`Auto-Detected Source Language: ${detected.toUpperCase()}`);
+                    }
 
-        diffEditor = monaco.editor.createDiffEditor(diffEditorContainer, {
-            theme: 'vs-dark',
-            automaticLayout: true,
-            readOnly: true,
-            minimap: { enabled: false },
-            fontSize: 14,
-            renderSideBySide: window.innerWidth > 768, // Inline diff on mobile, side-by-side on laptop
-            scrollbar: {
-                alwaysConsumeOnTouch: false
-            }
-        });
+                    // Auto-trigger analysis when code is pasted or typed
+                    if (code.trim().length > 5) {
+                        const btnAnalyze = document.getElementById('btn-analyze');
+                        if (btnAnalyze) {
+                            // Show a small indication that it's analyzing
+                            btnAnalyze.click();
+                        }
+                    }
+                }, 800);
+            });
 
-        // Initialize permanent models for the diff editor
-        const diffOriginalModel = monaco.editor.createModel('', 'java');
-        const diffModifiedModel = monaco.editor.createModel('', 'python');
-        diffEditor.setModel({
-            original: diffOriginalModel,
-            modified: diffModifiedModel
-        });
-
-        // Toggle Diff View
-        const btnToggleDiff = document.getElementById('btn-toggle-diff');
-        if (btnToggleDiff) {
-            btnToggleDiff.addEventListener('click', () => {
-                isDiffView = !isDiffView;
-                if (isDiffView) {
-                    diffEditorContainer.classList.remove('hidden');
-                    const diffHeader = document.getElementById('diff-header');
-                    if (diffHeader) diffHeader.classList.remove('hidden');
-                    diffEditor.layout();
-                } else {
-                    diffEditorContainer.classList.add('hidden');
-                    const diffHeader = document.getElementById('diff-header');
-                    if (diffHeader) diffHeader.classList.add('hidden');
+            targetEditor = monaco.editor.create(targetEditorContainer, {
+                value: '',
+                language: 'python',
+                theme: 'vs-dark',
+                automaticLayout: true,
+                readOnly: true,
+                domReadOnly: true,
+                minimap: { enabled: false },
+                fontSize: 14,
+                scrollbar: {
+                    alwaysConsumeOnTouch: false
                 }
             });
-        }
 
-        // Line-by-line hover highlighting (Semantic correspondence)
-        let sourceDecorations = [];
-        let targetDecorations = [];
-        
-        function updateHoverLine(lineNum) {
-            if (!sourceEditor || !targetEditor) return;
-            const decObj = [{
-                range: new monaco.Range(lineNum, 1, lineNum, 1),
-                options: { isWholeLine: true, className: 'hover-line-highlight' }
-            }];
-            sourceDecorations = sourceEditor.deltaDecorations(sourceDecorations, decObj);
-            targetDecorations = targetEditor.deltaDecorations(targetDecorations, decObj);
-        }
-        
-        function clearHoverLine() {
-            if (sourceEditor) sourceDecorations = sourceEditor.deltaDecorations(sourceDecorations, []);
-            if (targetEditor) targetDecorations = targetEditor.deltaDecorations(targetDecorations, []);
-        }
-
-        sourceEditor.onMouseMove(e => {
-            if (e.target && e.target.position) updateHoverLine(e.target.position.lineNumber);
-        });
-        targetEditor.onMouseMove(e => {
-            if (e.target && e.target.position) updateHoverLine(e.target.position.lineNumber);
-        });
-        sourceEditor.onMouseLeave(() => clearHoverLine());
-        targetEditor.onMouseLeave(() => clearHoverLine());
-
-        // Keyboard Shortcuts
-        document.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && e.key === 'Enter') {
-                e.preventDefault();
-                const btnTranslate = document.getElementById('btn-translate');
-                if (btnTranslate) btnTranslate.click();
-            }
-        });
-
-        // Gap Analysis View is now automatically controlled by the translation engine
-
-        // Code Theme Toggle for Editor
-        const editorThemeToggle = document.querySelector('.theme-toggle-editor');
-        editorThemeToggle.addEventListener('click', () => {
-            isEditorLight = !isEditorLight;
-            monaco.editor.setTheme(isEditorLight ? 'vs' : 'vs-dark');
-            editorThemeToggle.innerHTML = isEditorLight ? '<i class="fa-solid fa-moon"></i>' : '<i class="fa-solid fa-palette"></i>';
-        });
-
-        // Active Development Notification Helper for C++ & JavaScript
-        const devBanner = document.getElementById('dev-lang-banner');
-        const btnCloseDevBanner = document.getElementById('btn-close-dev-banner');
-        if (btnCloseDevBanner && devBanner) {
-            btnCloseDevBanner.addEventListener('click', () => {
-                devBanner.style.display = 'none';
-            });
-        }
-
-        function checkDevLang(lang, position = 'Language') {
-            if (lang === 'cpp' || lang === 'javascript') {
-                const langName = lang === 'cpp' ? 'C++' : 'JavaScript';
-                showToast(`🚧 We are currently working on ${langName} support! Full support is active for Java, Python, and C.`, 'warning', 4500);
-                if (devBanner) devBanner.style.display = 'flex';
-                return true;
-            } else {
-                if (devBanner && sourceLang.value !== 'cpp' && sourceLang.value !== 'javascript' && targetLang.value !== 'cpp' && targetLang.value !== 'javascript') {
-                    devBanner.style.display = 'none';
+            diffEditor = monaco.editor.createDiffEditor(diffEditorContainer, {
+                theme: 'vs-dark',
+                automaticLayout: true,
+                readOnly: true,
+                minimap: { enabled: false },
+                fontSize: 14,
+                renderSideBySide: window.innerWidth > 768, // Inline diff on mobile, side-by-side on laptop
+                scrollbar: {
+                    alwaysConsumeOnTouch: false
                 }
-                return false;
-            }
-        }
-
-        // Language Dropdowns change model languages
-        sourceLang.addEventListener('change', () => {
-            monaco.editor.setModelLanguage(sourceEditor.getModel(), sourceLang.value);
-            checkDevLang(sourceLang.value, 'Source');
-        });
-        sourceLang.addEventListener('click', () => {
-            if (sourceLang.value === 'cpp' || sourceLang.value === 'javascript') {
-                checkDevLang(sourceLang.value, 'Source');
-            }
-        });
-
-        targetLang.addEventListener('change', () => {
-            monaco.editor.setModelLanguage(targetEditor.getModel(), targetLang.value);
-            updateTargetLanguagePresets();
-            checkDevLang(targetLang.value, 'Target');
-        });
-        targetLang.addEventListener('click', () => {
-            if (targetLang.value === 'cpp' || targetLang.value === 'javascript') {
-                checkDevLang(targetLang.value, 'Target');
-            }
-        });
-
-        // Quick Preset Language Selectors for Languages (Java, Python, C, C++, JavaScript)
-        document.querySelectorAll('.btn-preset-lang').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const lang = btn.getAttribute('data-lang');
-                sourceLang.value = lang;
-                monaco.editor.setModelLanguage(sourceEditor.getModel(), lang);
-                
-                let sample = '';
-                if (lang === 'java') {
-                    sample = `public class Demo {\n  public static void main(String[] args) {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n      System.out.println("Value: " + i);\n    }\n  }\n}`;
-                    showToast(`Loaded ${lang.toUpperCase()} Main Language Sample`);
-                } else if (lang === 'python') {
-                    sample = `n = 5\nfor i in range(n):\n    print(f"Value: {i}")\n`;
-                    showToast(`Loaded ${lang.toUpperCase()} Main Language Sample`);
-                } else if (lang === 'c') {
-                    sample = `#include <stdio.h>\n\nint main(void) {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n        printf("Value: %d\\n", i);\n    }\n    return 0;\n}\n`;
-                    showToast(`Loaded ${lang.toUpperCase()} Main Language Sample`);
-                } else if (lang === 'cpp') {
-                    sample = `#include <iostream>\n\nint main() {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n        std::cout << "Value: " << i << std::endl;\n    }\n    return 0;\n}\n`;
-                    checkDevLang('cpp');
-                } else if (lang === 'javascript') {
-                    sample = `const n = 5;\nfor (let i = 0; i < n; i++) {\n    console.log("Value: " + i);\n}\n`;
-                    checkDevLang('javascript');
-                }
-                sourceEditor.setValue(sample);
             });
-        });
 
-        // Predefined Translations (Core Matrix for Java, Python, C)
-        const translationsMap = {
-            'java_python': {
-                input: `public class Demo {\n  public static void main(String[] args) {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n      System.out.println("Value: " + i);\n    }\n  }\n}`,
-                output: `n = 5\nfor i in range(n):\n    print("Value: " + str(i))`
-            },
-            'python_java': {
-                input: `n = 5\nfor i in range(n):\n    print("Value:", i)\n`,
-                output: `public class Demo {\n  public static void main(String[] args) {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n      System.out.println("Value:" + i);\n    }\n  }\n}`
-            },
-            'java_c': {
-                input: `public class Demo {\n  public static void main(String[] args) {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n      System.out.println("Value: " + i);\n    }\n  }\n}`,
-                output: `#include <stdio.h>\n\nint main(void) {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n        printf("Value: %d\\n", i);\n    }\n    return 0;\n}`
-            },
-            'c_java': {
-                input: `#include <stdio.h>\n\nint main() {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n        printf("Value: %d\\n", i);\n    }\n    return 0;\n}`,
-                output: `public class Demo {\n    public static void main(String[] args) {\n        int n = 5;\n        for (int i = 0; i < n; i++) {\n            System.out.println("Value: " + i);\n        }\n    }\n}`
-            },
-            'c_python': {
-                input: `#include <stdio.h>\n\nint main() {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n        printf("Value: %d\\n", i);\n    }\n    return 0;\n}`,
-                output: `n = 5\nfor i in range(n):\n    print("Value: " + str(i))`
-            },
-            'python_c': {
-                input: `n = 5\nfor i in range(n):\n    print(i)\n`,
-                output: `#include <stdio.h>\n\nint main(void) {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n        printf("%d\\n", i);\n    }\n    return 0;\n}`
-            },
-            'c_javascript': {
-                input: `#include <stdio.h>\n\nint main() {\n    printf("Hello World");\n    return 0;\n}`,
-                output: `console.log("Hello World");`
-            },
-            'javascript_c': {
-                input: `console.log("Hello World");`,
-                output: `#include <stdio.h>\n\nint main() {\n    printf("Hello World");\n    return 0;\n}`
-            },
-            'cpp_python': {
-                input: `#include <iostream>\n\nint main() {\n    std::cout << "Data Structures" << std::endl;\n    return 0;\n}`,
-                output: `print("Data Structures")`
-            },
-            'python_cpp': {
-                input: `print("Data Structures")`,
-                output: `#include <iostream>\n\nint main() {\n    std::cout << "Data Structures" << std::endl;\n    return 0;\n}`
-            }
-        };
-
-        // Analyze Code Button
-        const btnAnalyze = document.getElementById('btn-analyze');
-        const loadingOverlay = document.getElementById('loading-overlay');
-        const loadingText = document.getElementById('loading-text');
-        const dashboard = document.getElementById('results-dashboard');
-        const btnTranslate = document.getElementById('btn-translate');
-        let translationInProgress = false;
-
-        if (btnTranslate) {
-            const languageSelects = [sourceLang, targetLang];
-            let selectionGlowTimeout;
-            const updateTranslationGlow = () => {
-                const languageControlActive = languageSelects.some(select =>
-                    select.matches(':hover') || document.activeElement === select
-                );
-                btnTranslate.classList.toggle('language-selection-active', languageControlActive);
-            };
-            const showTranslationGlow = () => {
-                btnTranslate.classList.add('language-selection-active');
-                window.clearTimeout(selectionGlowTimeout);
-                selectionGlowTimeout = window.setTimeout(() => {
-                    updateTranslationGlow();
-                }, 900);
-            };
-
-            languageSelects.forEach(select => {
-                select.addEventListener('pointerenter', updateTranslationGlow);
-                select.addEventListener('pointerleave', updateTranslationGlow);
-                select.addEventListener('focus', () => btnTranslate.classList.add('language-selection-active'));
-                select.addEventListener('blur', updateTranslationGlow);
-                select.addEventListener('change', showTranslationGlow);
+            // Initialize permanent models for the diff editor
+            const diffOriginalModel = monaco.editor.createModel('', 'java');
+            const diffModifiedModel = monaco.editor.createModel('', 'python');
+            diffEditor.setModel({
+                original: diffOriginalModel,
+                modified: diffModifiedModel
             });
-        }
-        
-        btnAnalyze.addEventListener('click', async () => {
-            if (!sourceEditor.getValue().trim()) {
-                alert("Please enter some code to analyze.");
-                return;
-            }
 
-            loadingText.textContent = "Analyzing Syntax & Semantics...";
-            loadingOverlay.classList.remove('hidden');
-            dashboard.classList.add('hidden');
-
-            try {
-                const response = await fetch(`/analyze-code?lang=${sourceLang.value}`, {
-                    method: 'POST',
-                    body: sourceEditor.getValue()
+            // Toggle Diff View
+            const btnToggleDiff = document.getElementById('btn-toggle-diff');
+            if (btnToggleDiff) {
+                btnToggleDiff.addEventListener('click', () => {
+                    isDiffView = !isDiffView;
+                    if (isDiffView) {
+                        diffEditorContainer.classList.remove('hidden');
+                        const diffHeader = document.getElementById('diff-header');
+                        if (diffHeader) diffHeader.classList.remove('hidden');
+                        diffEditor.layout();
+                    } else {
+                        diffEditorContainer.classList.add('hidden');
+                        const diffHeader = document.getElementById('diff-header');
+                        if (diffHeader) diffHeader.classList.add('hidden');
+                    }
                 });
-                
-                loadingOverlay.classList.add('hidden');
-                dashboard.classList.remove('hidden');
+            }
 
-                if (response.ok) {
-                    const result = await response.json();
-                    if (result.error) {
-                        alert(result.message);
-                        return;
-                    }
+            // Line-by-line hover highlighting (Semantic correspondence)
+            let sourceDecorations = [];
+            let targetDecorations = [];
 
-                    // Syntax Errors
-                    const syntaxEl = document.getElementById('res-syntax');
-                    
-                    // Draw or Clear Editor Decorations
-                    if (window.errorDecorations) window.errorDecorations.clear();
-                    
-                    if (result.markers && result.markers.length > 0) {
-                        const decorations = result.markers.map(m => ({
-                            range: new monaco.Range(m.line, 1, m.line, 1),
-                            options: {
-                                isWholeLine: true,
-                                className: 'error-line-highlight',
-                                hoverMessage: { value: '🤖 **AI Fix:** ' + m.message }
-                            }
-                        }));
-                        window.errorDecorations = sourceEditor.createDecorationsCollection(decorations);
+            function updateHoverLine(lineNum) {
+                if (!sourceEditor || !targetEditor) return;
+                const decObj = [{
+                    range: new monaco.Range(lineNum, 1, lineNum, 1),
+                    options: { isWholeLine: true, className: 'hover-line-highlight' }
+                }];
+                sourceDecorations = sourceEditor.deltaDecorations(sourceDecorations, decObj);
+                targetDecorations = targetEditor.deltaDecorations(targetDecorations, decObj);
+            }
+
+            function clearHoverLine() {
+                if (sourceEditor) sourceDecorations = sourceEditor.deltaDecorations(sourceDecorations, []);
+                if (targetEditor) targetDecorations = targetEditor.deltaDecorations(targetDecorations, []);
+            }
+
+            sourceEditor.onMouseMove(e => {
+                if (e.target && e.target.position) updateHoverLine(e.target.position.lineNumber);
+            });
+            targetEditor.onMouseMove(e => {
+                if (e.target && e.target.position) updateHoverLine(e.target.position.lineNumber);
+            });
+            sourceEditor.onMouseLeave(() => clearHoverLine());
+            targetEditor.onMouseLeave(() => clearHoverLine());
+
+            // Keyboard Shortcuts
+            document.addEventListener('keydown', (e) => {
+                if (e.ctrlKey && e.key === 'Enter') {
+                    e.preventDefault();
+                    const btnTranslate = document.getElementById('btn-translate');
+                    if (btnTranslate) btnTranslate.click();
+                }
+            });
+
+            // Gap Analysis View is now automatically controlled by the translation engine
+
+            // Code Theme Toggle for Editor
+            const editorThemeToggle = document.querySelector('.theme-toggle-editor');
+            editorThemeToggle.addEventListener('click', () => {
+                isEditorLight = !isEditorLight;
+                monaco.editor.setTheme(isEditorLight ? 'vs' : 'vs-dark');
+                editorThemeToggle.innerHTML = isEditorLight ? '<i class="fa-solid fa-moon"></i>' : '<i class="fa-solid fa-palette"></i>';
+            });
+
+            // Active Development Notification Helper for C++ & JavaScript
+            const devBanner = document.getElementById('dev-lang-banner');
+            const btnCloseDevBanner = document.getElementById('btn-close-dev-banner');
+            if (btnCloseDevBanner && devBanner) {
+                btnCloseDevBanner.addEventListener('click', () => {
+                    devBanner.style.display = 'none';
+                });
+            }
+
+            function checkDevLang(lang, position = 'Language') {
+                if (lang === 'cpp' || lang === 'javascript') {
+                    const langName = lang === 'cpp' ? 'C++' : 'JavaScript';
+                    showToast(`🚧 We are currently working on ${langName} support! Full support is active for Java, Python, and C.`, 'warning', 4500);
+                    if (devBanner) devBanner.style.display = 'flex';
+                    return true;
+                } else {
+                    if (devBanner && sourceLang.value !== 'cpp' && sourceLang.value !== 'javascript' && targetLang.value !== 'cpp' && targetLang.value !== 'javascript') {
+                        devBanner.style.display = 'none';
                     }
-                    
-                    if (result.errorCount > 0) {
-                        syntaxEl.innerHTML = `<i class="fa-solid fa-xmark text-red"></i> ${result.errorCount} syntax errors detected`;
-                        syntaxEl.className = 'result-value text-red';
-                        document.getElementById('res-gap').textContent = 'Translation Blocked - Fix Errors';
-                        document.getElementById('res-score').textContent = 'N/A';
-                        document.getElementById('res-time-complexity').textContent = 'N/A';
-                        document.getElementById('res-space-complexity').textContent = 'N/A';
-                        
-                        const suggestions = document.getElementById('res-suggestions');
+                    return false;
+                }
+            }
+
+            // Language Dropdowns change model languages
+            sourceLang.addEventListener('change', () => {
+                monaco.editor.setModelLanguage(sourceEditor.getModel(), sourceLang.value);
+                checkDevLang(sourceLang.value, 'Source');
+            });
+            sourceLang.addEventListener('click', () => {
+                if (sourceLang.value === 'cpp' || sourceLang.value === 'javascript') {
+                    checkDevLang(sourceLang.value, 'Source');
+                }
+            });
+
+            targetLang.addEventListener('change', () => {
+                monaco.editor.setModelLanguage(targetEditor.getModel(), targetLang.value);
+                updateTargetLanguagePresets();
+                checkDevLang(targetLang.value, 'Target');
+            });
+            targetLang.addEventListener('click', () => {
+                if (targetLang.value === 'cpp' || targetLang.value === 'javascript') {
+                    checkDevLang(targetLang.value, 'Target');
+                }
+            });
+
+            // Quick Preset Language Selectors for Languages (Java, Python, C, C++, JavaScript)
+            document.querySelectorAll('.btn-preset-lang').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const lang = btn.getAttribute('data-lang');
+                    sourceLang.value = lang;
+                    monaco.editor.setModelLanguage(sourceEditor.getModel(), lang);
+
+                    let sample = '';
+                    if (lang === 'java') {
+                        sample = `public class Demo {\n  public static void main(String[] args) {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n      System.out.println("Value: " + i);\n    }\n  }\n}`;
+                        showToast(`Loaded ${lang.toUpperCase()} Main Language Sample`);
+                    } else if (lang === 'python') {
+                        sample = `n = 5\nfor i in range(n):\n    print(f"Value: {i}")\n`;
+                        showToast(`Loaded ${lang.toUpperCase()} Main Language Sample`);
+                    } else if (lang === 'c') {
+                        sample = `#include <stdio.h>\n\nint main(void) {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n        printf("Value: %d\\n", i);\n    }\n    return 0;\n}\n`;
+                        showToast(`Loaded ${lang.toUpperCase()} Main Language Sample`);
+                    } else if (lang === 'cpp') {
+                        sample = `#include <iostream>\n\nint main() {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n        std::cout << "Value: " << i << std::endl;\n    }\n    return 0;\n}\n`;
+                        checkDevLang('cpp');
+                    } else if (lang === 'javascript') {
+                        sample = `const n = 5;\nfor (let i = 0; i < n; i++) {\n    console.log("Value: " + i);\n}\n`;
+                        checkDevLang('javascript');
+                    }
+                    sourceEditor.setValue(sample);
+                });
+            });
+
+            // Predefined Translations (Core Matrix for Java, Python, C)
+            const translationsMap = {
+                'java_python': {
+                    input: `public class Demo {\n  public static void main(String[] args) {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n      System.out.println("Value: " + i);\n    }\n  }\n}`,
+                    output: `n = 5\nfor i in range(n):\n    print("Value: " + str(i))`
+                },
+                'python_java': {
+                    input: `n = 5\nfor i in range(n):\n    print("Value:", i)\n`,
+                    output: `public class Demo {\n  public static void main(String[] args) {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n      System.out.println("Value:" + i);\n    }\n  }\n}`
+                },
+                'java_c': {
+                    input: `public class Demo {\n  public static void main(String[] args) {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n      System.out.println("Value: " + i);\n    }\n  }\n}`,
+                    output: `#include <stdio.h>\n\nint main(void) {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n        printf("Value: %d\\n", i);\n    }\n    return 0;\n}`
+                },
+                'c_java': {
+                    input: `#include <stdio.h>\n\nint main() {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n        printf("Value: %d\\n", i);\n    }\n    return 0;\n}`,
+                    output: `public class Demo {\n    public static void main(String[] args) {\n        int n = 5;\n        for (int i = 0; i < n; i++) {\n            System.out.println("Value: " + i);\n        }\n    }\n}`
+                },
+                'c_python': {
+                    input: `#include <stdio.h>\n\nint main() {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n        printf("Value: %d\\n", i);\n    }\n    return 0;\n}`,
+                    output: `n = 5\nfor i in range(n):\n    print("Value: " + str(i))`
+                },
+                'python_c': {
+                    input: `n = 5\nfor i in range(n):\n    print(i)\n`,
+                    output: `#include <stdio.h>\n\nint main(void) {\n    int n = 5;\n    for (int i = 0; i < n; i++) {\n        printf("%d\\n", i);\n    }\n    return 0;\n}`
+                },
+                'c_javascript': {
+                    input: `#include <stdio.h>\n\nint main() {\n    printf("Hello World");\n    return 0;\n}`,
+                    output: `console.log("Hello World");`
+                },
+                'javascript_c': {
+                    input: `console.log("Hello World");`,
+                    output: `#include <stdio.h>\n\nint main() {\n    printf("Hello World");\n    return 0;\n}`
+                },
+                'cpp_python': {
+                    input: `#include <iostream>\n\nint main() {\n    std::cout << "Data Structures" << std::endl;\n    return 0;\n}`,
+                    output: `print("Data Structures")`
+                },
+                'python_cpp': {
+                    input: `print("Data Structures")`,
+                    output: `#include <iostream>\n\nint main() {\n    std::cout << "Data Structures" << std::endl;\n    return 0;\n}`
+                }
+            };
+
+            // Analyze Code Button
+            const btnAnalyze = document.getElementById('btn-analyze');
+            const loadingOverlay = document.getElementById('loading-overlay');
+            const loadingText = document.getElementById('loading-text');
+            const dashboard = document.getElementById('results-dashboard');
+            const btnTranslate = document.getElementById('btn-translate');
+            let translationInProgress = false;
+
+            if (btnTranslate) {
+                const languageSelects = [sourceLang, targetLang];
+                let selectionGlowTimeout;
+                const updateTranslationGlow = () => {
+                    const languageControlActive = languageSelects.some(select =>
+                        select.matches(':hover') || document.activeElement === select
+                    );
+                    btnTranslate.classList.toggle('language-selection-active', languageControlActive);
+                };
+                const showTranslationGlow = () => {
+                    btnTranslate.classList.add('language-selection-active');
+                    window.clearTimeout(selectionGlowTimeout);
+                    selectionGlowTimeout = window.setTimeout(() => {
+                        updateTranslationGlow();
+                    }, 900);
+                };
+
+                languageSelects.forEach(select => {
+                    select.addEventListener('pointerenter', updateTranslationGlow);
+                    select.addEventListener('pointerleave', updateTranslationGlow);
+                    select.addEventListener('focus', () => btnTranslate.classList.add('language-selection-active'));
+                    select.addEventListener('blur', updateTranslationGlow);
+                    select.addEventListener('change', showTranslationGlow);
+                });
+            }
+
+            btnAnalyze.addEventListener('click', async () => {
+                if (!sourceEditor.getValue().trim()) {
+                    alert("Please enter some code to analyze.");
+                    return;
+                }
+
+                loadingText.textContent = "Analyzing Syntax & Semantics...";
+                loadingOverlay.classList.remove('hidden');
+                dashboard.classList.add('hidden');
+
+                try {
+                    const response = await fetch(`/analyze-code?lang=${sourceLang.value}`, {
+                        method: 'POST',
+                        body: sourceEditor.getValue()
+                    });
+
+                    loadingOverlay.classList.add('hidden');
+                    dashboard.classList.remove('hidden');
+
+                    if (response.ok) {
+                        const result = await response.json();
+                        if (result.error) {
+                            alert(result.message);
+                            return;
+                        }
+
+                        // Syntax Errors
+                        const syntaxEl = document.getElementById('res-syntax');
+
+                        // Draw or Clear Editor Decorations
+                        if (window.errorDecorations) window.errorDecorations.clear();
+
                         if (result.markers && result.markers.length > 0) {
-                            suggestions.innerHTML = result.markers.map((m, i) => `
+                            const decorations = result.markers.map(m => ({
+                                range: new monaco.Range(m.line, 1, m.line, 1),
+                                options: {
+                                    isWholeLine: true,
+                                    className: 'error-line-highlight',
+                                    hoverMessage: { value: '🤖 **AI Fix:** ' + m.message }
+                                }
+                            }));
+                            window.errorDecorations = sourceEditor.createDecorationsCollection(decorations);
+                        }
+
+                        if (result.errorCount > 0) {
+                            syntaxEl.innerHTML = `<i class="fa-solid fa-xmark text-red"></i> ${result.errorCount} syntax errors detected`;
+                            syntaxEl.className = 'result-value text-red';
+                            document.getElementById('res-gap').textContent = 'Translation Blocked - Fix Errors';
+                            document.getElementById('res-score').textContent = 'N/A';
+                            document.getElementById('res-time-complexity').textContent = 'N/A';
+                            document.getElementById('res-space-complexity').textContent = 'N/A';
+
+                            const suggestions = document.getElementById('res-suggestions');
+                            if (result.markers && result.markers.length > 0) {
+                                suggestions.innerHTML = result.markers.map((m, i) => `
                                 <li style="margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; list-style-type: none;">
                                     <strong style="color: #ff6b6b;">❌ Line ${m.line} Error:</strong><br>
                                     <div style="font-family: monospace; background: rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 4px; margin: 5px 0; border-left: 3px solid #ff6b6b;">
@@ -1567,19 +1408,19 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <span style="color: var(--primary-color);"><strong>🤖 AI Fix:</strong> ${m.message}</span>
                                 </li>
                             `).join('');
+                            } else {
+                                suggestions.innerHTML = `<li>AST Analysis aborted due to syntax errors.</li>`;
+                            }
                         } else {
-                            suggestions.innerHTML = `<li>AST Analysis aborted due to syntax errors.</li>`;
-                        }
-                    } else {
-                        syntaxEl.innerHTML = '<i class="fa-solid fa-check"></i> No syntax errors detected';
-                        syntaxEl.className = 'result-value text-green';
-                        document.getElementById('res-gap').textContent = 'Low Risk';
-                        document.getElementById('res-score').textContent = '92%';
-                        document.getElementById('res-time-complexity').textContent = result.timeComplexity || 'O(1)';
-                        document.getElementById('res-space-complexity').textContent = result.spaceComplexity || 'O(1)';
-                        
-                        const suggestions = document.getElementById('res-suggestions');
-                        suggestions.innerHTML = `
+                            syntaxEl.innerHTML = '<i class="fa-solid fa-check"></i> No syntax errors detected';
+                            syntaxEl.className = 'result-value text-green';
+                            document.getElementById('res-gap').textContent = 'Low Risk';
+                            document.getElementById('res-score').textContent = '92%';
+                            document.getElementById('res-time-complexity').textContent = result.timeComplexity || 'O(1)';
+                            document.getElementById('res-space-complexity').textContent = result.spaceComplexity || 'O(1)';
+
+                            const suggestions = document.getElementById('res-suggestions');
+                            suggestions.innerHTML = `
                             <li><strong>Time Complexity:</strong> ${result.timeExplanation || 'N/A'}</li>
                             <li><strong>Space Complexity:</strong> ${result.spaceExplanation || 'N/A'}</li>
                             <li><strong>Cyclomatic Complexity:</strong> ${result.cyclomaticComplexity || '1'} (Independent paths)</li>
@@ -1588,483 +1429,559 @@ document.addEventListener('DOMContentLoaded', () => {
                             <li><strong>Data Flow Analysis:</strong> ${result.dataFlow || 'Verified'}</li>
                             <li><strong>Dead Code:</strong> ${result.deadCode || 'None'}</li>
                         `;
+                        }
+
+                        document.getElementById('res-confidence').textContent = '96%';
+
+                        // Semantic Logic Breakdown
+                        const logicList = document.getElementById('res-logic-breakdown');
+                        if (logicList) {
+                            logicList.innerHTML = result.breakdown.map(item => `<li>${item}</li>`).join('');
+                        }
+
+                        // Smoothly scroll the dashboard into full view after everything is populated
+                        setTimeout(() => {
+                            dashboard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }, 50);
+
+                    } else {
+                        alert("Failed to connect to the server.");
                     }
-                    
-                    document.getElementById('res-confidence').textContent = '96%';
-
-                    // Semantic Logic Breakdown
-                    const logicList = document.getElementById('res-logic-breakdown');
-                    if (logicList) {
-                        logicList.innerHTML = result.breakdown.map(item => `<li>${item}</li>`).join('');
-                    }
-                    
-                    // Smoothly scroll the dashboard into full view after everything is populated
-                    setTimeout(() => {
-                        dashboard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }, 50);
-
-                } else {
-                    alert("Failed to connect to the server.");
-                }
-            } catch (e) {
-                console.error("Analysis failed:", e);
-                loadingOverlay.classList.add('hidden');
-                alert("Error during analysis. Make sure the local server is running.");
-            }
-        });
-
-        // Syn2Sem Engine Translate Button (Calls Backend /translate-code)
-        btnTranslate.addEventListener('click', async () => {
-            if (translationInProgress) return;
-            translationInProgress = true;
-            const originalTranslateLabel = btnTranslate.innerHTML;
-            let translationUiActive = false;
-            try {
-                if (fbAuth && !authStateReady) await authStateInitialized;
-                if (!currentUser) {
-                    showToast("Sign in to translate code.", 'warning');
-                    openAuthModal(false);
-                    return;
-                }
-
-                const inputCode = sourceEditor.getValue();
-                if (!inputCode.trim()) {
-                    showToast("Please enter code to translate.", 'warning');
-                    return;
-                }
-
-                const sLang = sourceLang.value;
-                const tLang = targetLang.value;
-                const aiSettings = readSavedAiSettings();
-
-                if (sLang === 'cpp' || sLang === 'javascript' || tLang === 'cpp' || tLang === 'javascript') {
-                    showToast("🚧 We are currently working on C++ and JavaScript support! Full support is active for Java, Python, and C.", 'warning', 4500);
-                }
-
-                loadingText.textContent = "Translating code...";
-                loadingOverlay.classList.remove('hidden');
-                btnTranslate.disabled = true;
-                btnTranslate.setAttribute('aria-busy', 'true');
-                btnTranslate.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Translating...';
-                translationUiActive = true;
-
-                const response = await fetch(`/translate-code?sourceLang=${sLang}&targetLang=${tLang}`, {
-                    method: 'POST',
-                    headers: {
-                        'X-API-Keys': aiSettings.apiKeys.join(','),
-                        'X-API-Provider': aiSettings.provider,
-                        'X-API-Model': aiSettings.model
-                    },
-                    body: inputCode
-                });
-
-                const result = await response.json().catch(() => ({}));
-                if (!response.ok || result.error) {
-                    throw new Error(result.message || `Translation failed (HTTP ${response.status}).`);
-                }
-
-                const translatedCode = result.translatedCode;
-                if (typeof translatedCode !== 'string' || !translatedCode.trim()) {
-                    throw new Error('The translation service returned no translated code. Please try again.');
-                }
-
-                targetEditor.setValue(translatedCode);
-
-                dashboard.classList.remove('hidden');
-                if (result.similarityScore) document.getElementById('res-score').textContent = result.similarityScore;
-                if (result.gapStatus) document.getElementById('res-gap').textContent = result.gapStatus;
-                if (result.confidence) document.getElementById('res-confidence').textContent = result.confidence;
-
-                const models = diffEditor.getModel();
-                if (models) {
-                    monaco.editor.setModelLanguage(models.original, sLang);
-                    monaco.editor.setModelLanguage(models.modified, tLang);
-                    models.original.setValue(inputCode);
-                    models.modified.setValue(translatedCode);
-                }
-
-                if (isDiffView) {
-                    diffEditorContainer.classList.remove('hidden');
-                    const diffHeader = document.getElementById('diff-header');
-                    if (diffHeader) diffHeader.classList.remove('hidden');
-                    setTimeout(() => {
-                        if (diffEditor) diffEditor.layout();
-                    }, 150);
-                }
-
-                saveHistory(inputCode, translatedCode, sLang, tLang);
-                if (result.translationMethod !== 'compiler' && result.targetVerified === false) {
-                    showToast('Translation completed, but the output has syntax issues. Review it before running.', 'warning', 6500);
-                } else if (result.translationMethod !== 'compiler') {
-                    showToast('Translation complete.');
-                }
-            } catch (err) {
-                console.error("Syn2Sem Translate error:", err);
-                showToast(err.message || 'Translation failed. Please try again.', 'warning', 6500);
-            } finally {
-                if (translationUiActive) {
+                } catch (e) {
+                    console.error("Analysis failed:", e);
                     loadingOverlay.classList.add('hidden');
-                    btnTranslate.disabled = false;
-                    btnTranslate.removeAttribute('aria-busy');
-                    btnTranslate.innerHTML = originalTranslateLabel;
+                    alert("Error during analysis. Make sure the local server is running.");
                 }
-                translationInProgress = false;
-            }
-        });
-
-        // Clear Button
-        const clearEditors = () => {
-            sourceEditor.setValue('');
-            targetEditor.setValue('');
-            const diffModels = diffEditor.getModel();
-            if (diffModels) {
-                diffModels.original.setValue('');
-                diffModels.modified.setValue('');
-            }
-            dashboard.classList.add('hidden');
-            btnTranslate.style.opacity = '1';
-            btnTranslate.style.cursor = 'pointer';
-            const diffHeader = document.getElementById('diff-header');
-            if (diffHeader) diffHeader.classList.add('hidden');
-            diffEditorContainer.classList.add('hidden');
-            isDiffView = false;
-        };
-        const btnClear = document.getElementById('btn-clear');
-        const btnClearSourceMobile = document.getElementById('btn-clear-source-mobile');
-        if (btnClear) btnClear.addEventListener('click', clearEditors);
-        if (btnClearSourceMobile) btnClearSourceMobile.addEventListener('click', clearEditors);
-
-        // Copy Output
-        const btnCopy = document.getElementById('btn-copy');
-        btnCopy.addEventListener('click', () => {
-            const val = targetEditor.getValue();
-            if (!val) return;
-            navigator.clipboard.writeText(val).then(() => {
-                const icon = btnCopy.querySelector('i');
-                icon.classList.remove('fa-copy');
-                icon.classList.add('fa-check');
-                icon.style.color = 'var(--success-color)';
-                setTimeout(() => {
-                    icon.classList.remove('fa-check');
-                    icon.classList.add('fa-copy');
-                    icon.style.color = '';
-                }, 2000);
             });
-        });
 
-        // Open Output in Notepad (via server) or fallback to download
-        const btnDownload = document.getElementById('btn-download');
-        btnDownload.addEventListener('click', async () => {
-            const val = targetEditor.getValue();
-            if (!val) return;
-            
-            try {
-                // Attempt to send to local server to open Notepad directly
-                const response = await fetch('/open-notepad', {
-                    method: 'POST',
-                    body: val
-                });
-                
-                if (response.ok) {
-                    showToast("Opened directly in Notepad!");
-                    return;
-                } else {
-                    alert("Failed to open Notepad. Is the server running?");
-                }
-            } catch (e) {
-                console.error("Server connection failed:", e);
-                alert("Error: Cannot open Notepad directly.\n\nYou are viewing this file directly in the browser (file://). To allow this app to open Notepad on your computer, you MUST run the local server by typing 'node server.js' in the terminal, and then open http://localhost:3000 in your browser.");
-            }
-        });
-
-        // Generate PDF Report
-        const btnDownloadPdf = document.getElementById('btn-download-pdf');
-        if (btnDownloadPdf) {
-            btnDownloadPdf.addEventListener('click', () => {
-                const sourceCode = sourceEditor ? sourceEditor.getValue() : '';
-                const translatedCode = targetEditor ? targetEditor.getValue() : '';
-                if (!translatedCode.trim()) {
-                    alert("No code to export. Please translate something first!");
-                    return;
-                }
-                
+            // Syn2Sem Engine Translate Button (Calls Backend /translate-code)
+            btnTranslate.addEventListener('click', async () => {
+                if (translationInProgress) return;
+                translationInProgress = true;
+                const originalTranslateLabel = btnTranslate.innerHTML;
+                let translationUiActive = false;
                 try {
-                    // Check if jsPDF is available
-                    if (!window.jspdf) {
-                        alert("PDF library is still loading or failed to load. Please wait a moment and try again.");
+                    if (fbAuth && !authStateReady) await authStateInitialized;
+                    if (!currentUser) {
+                        showToast("Sign in to translate code.", 'warning');
+                        openAuthModal(false);
                         return;
                     }
-                    const { jsPDF } = window.jspdf;
-                    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-                    const pageWidth = doc.internal.pageSize.getWidth();
-                    const pageHeight = doc.internal.pageSize.getHeight();
-                    const margin = 15;
-                    const contentWidth = pageWidth - margin * 2;
-                    const footerY = pageHeight - 10;
-                    let y = 57;
 
-                    const addPageHeader = (continuation = false) => {
-                        doc.setFillColor(15, 23, 42);
-                        doc.rect(0, 0, pageWidth, 39, 'F');
-                        doc.setFillColor(6, 182, 212);
-                        doc.rect(0, 39, pageWidth, 1.5, 'F');
-                        doc.setTextColor(255, 255, 255);
-                        doc.setFont('helvetica', 'bold');
-                        doc.setFontSize(19);
-                        doc.text(continuation ? 'Translation Report (continued)' : 'Syn2Sem Translation Report', margin, 19);
-                        doc.setFont('helvetica', 'normal');
-                        doc.setFontSize(9);
-                        doc.setTextColor(203, 213, 225);
-                        doc.text(`${sourceLang.value.toUpperCase()} to ${targetLang.value.toUpperCase()}  |  ${new Date().toLocaleString()}`, margin, 29);
-                    };
+                    const inputCode = sourceEditor.getValue();
+                    if (!inputCode.trim()) {
+                        showToast("Please enter code to translate.", 'warning');
+                        return;
+                    }
 
-                    const addSectionTitle = (title) => {
-                        if (y + 12 > footerY - 5) {
-                            doc.addPage();
-                            addPageHeader(true);
-                            y = 52;
+                    const sLang = sourceLang.value;
+                    const tLang = targetLang.value;
+                    if (sLang === 'cpp' || sLang === 'javascript' || tLang === 'cpp' || tLang === 'javascript') {
+                        showToast("🚧 We are currently working on C++ and JavaScript support! Full support is active for Java, Python, and C.", 'warning', 4500);
+                    }
+
+                    loadingText.textContent = "Translating code...";
+                    loadingOverlay.classList.remove('hidden');
+                    btnTranslate.disabled = true;
+                    btnTranslate.setAttribute('aria-busy', 'true');
+                    btnTranslate.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Translating...';
+                    translationUiActive = true;
+
+                    const response = await fetch(`/translate-code?sourceLang=${sLang}&targetLang=${tLang}`, {
+                        method: 'POST',
+                        body: inputCode
+                    });
+
+                    const result = await response.json().catch(() => ({}));
+                    if (!response.ok || result.error) {
+                        throw new Error(result.message || `Translation failed (HTTP ${response.status}).`);
+                    }
+
+                    const translatedCode = result.translatedCode;
+                    if (typeof translatedCode !== 'string' || !translatedCode.trim()) {
+                        throw new Error('The translation service returned no translated code. Please try again.');
+                    }
+
+                    targetEditor.setValue(translatedCode);
+
+                    dashboard.classList.remove('hidden');
+                    if (result.similarityScore) document.getElementById('res-score').textContent = result.similarityScore;
+                    if (result.gapStatus) document.getElementById('res-gap').textContent = result.gapStatus;
+                    if (result.confidence) document.getElementById('res-confidence').textContent = result.confidence;
+
+                    const models = diffEditor.getModel();
+                    if (models) {
+                        monaco.editor.setModelLanguage(models.original, sLang);
+                        monaco.editor.setModelLanguage(models.modified, tLang);
+                        models.original.setValue(inputCode);
+                        models.modified.setValue(translatedCode);
+                    }
+
+                    if (isDiffView) {
+                        diffEditorContainer.classList.remove('hidden');
+                        const diffHeader = document.getElementById('diff-header');
+                        if (diffHeader) diffHeader.classList.remove('hidden');
+                        setTimeout(() => {
+                            if (diffEditor) diffEditor.layout();
+                        }, 150);
+                    }
+
+                    saveHistory(inputCode, translatedCode, sLang, tLang);
+                    if (result.translationMethod !== 'compiler' && result.targetVerified === false) {
+                        showToast('Translation completed, but the output has syntax issues. Review it before running.', 'warning', 6500);
+                    } else if (result.translationMethod !== 'compiler') {
+                        showToast('Translation complete.');
+                    }
+                } catch (err) {
+                    console.error("Syn2Sem Translate error:", err);
+                    showToast(err.message || 'Translation failed. Please try again.', 'warning', 6500);
+                } finally {
+                    if (translationUiActive) {
+                        loadingOverlay.classList.add('hidden');
+                        btnTranslate.disabled = false;
+                        btnTranslate.removeAttribute('aria-busy');
+                        btnTranslate.innerHTML = originalTranslateLabel;
+                    }
+                    translationInProgress = false;
+                }
+            });
+
+            // Clear Button
+            const clearEditors = () => {
+                sourceEditor.setValue('');
+                targetEditor.setValue('');
+                const diffModels = diffEditor.getModel();
+                if (diffModels) {
+                    diffModels.original.setValue('');
+                    diffModels.modified.setValue('');
+                }
+                dashboard.classList.add('hidden');
+                btnTranslate.style.opacity = '1';
+                btnTranslate.style.cursor = 'pointer';
+                const diffHeader = document.getElementById('diff-header');
+                if (diffHeader) diffHeader.classList.add('hidden');
+                diffEditorContainer.classList.add('hidden');
+                isDiffView = false;
+            };
+            const btnClear = document.getElementById('btn-clear');
+            const btnClearSourceMobile = document.getElementById('btn-clear-source-mobile');
+            if (btnClear) btnClear.addEventListener('click', clearEditors);
+            if (btnClearSourceMobile) btnClearSourceMobile.addEventListener('click', clearEditors);
+
+            // Copy Output
+            const btnCopy = document.getElementById('btn-copy');
+            btnCopy.addEventListener('click', () => {
+                const val = targetEditor.getValue();
+                if (!val) return;
+                navigator.clipboard.writeText(val).then(() => {
+                    const icon = btnCopy.querySelector('i');
+                    icon.classList.remove('fa-copy');
+                    icon.classList.add('fa-check');
+                    icon.style.color = 'var(--success-color)';
+                    setTimeout(() => {
+                        icon.classList.remove('fa-check');
+                        icon.classList.add('fa-copy');
+                        icon.style.color = '';
+                    }, 2000);
+                });
+            });
+
+            // Code retrieval helper: Target Editor -> Source Editor -> Default template
+            const getCodeToExport = (preferExt) => {
+                const targetVal = targetEditor ? targetEditor.getValue() : '';
+                if (targetVal && targetVal.trim()) {
+                    const ext = langToExt[targetLang ? targetLang.value : ''] || preferExt || '.txt';
+                    return { code: targetVal, ext: ext, source: 'target' };
+                }
+                const sourceVal = sourceEditor ? sourceEditor.getValue() : '';
+                if (sourceVal && sourceVal.trim()) {
+                    const ext = langToExt[sourceLang ? sourceLang.value : ''] || preferExt || '.txt';
+                    return { code: sourceVal, ext: ext, source: 'source' };
+                }
+                return {
+                    code: "// Syn2Sem Workspace\n// Write or translate your code here.\n",
+                    ext: preferExt || '.txt',
+                    source: 'default'
+                };
+            };
+
+            // Post to local server via hidden iframe (bypasses HTTPS PNA restrictions)
+            const postToLocalDesktop = (app, ext, code) => {
+                let iframe = document.getElementById('stos_launch_iframe');
+                if (!iframe) {
+                    iframe = document.createElement('iframe');
+                    iframe.id = 'stos_launch_iframe';
+                    iframe.name = 'stos_launch_iframe';
+                    iframe.style.display = 'none';
+                    document.body.appendChild(iframe);
+                }
+                let form = document.getElementById('stos_launch_form');
+                if (!form) {
+                    form = document.createElement('form');
+                    form.id = 'stos_launch_form';
+                    form.method = 'POST';
+                    form.target = 'stos_launch_iframe';
+                    form.style.display = 'none';
+                    document.body.appendChild(form);
+                }
+                form.innerHTML = '';
+                const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                form.action = isLocal ? '/quick-launch' : 'http://localhost:3000/quick-launch';
+
+                const appInput = document.createElement('input');
+                appInput.type = 'hidden';
+                appInput.name = 'app';
+                appInput.value = app;
+                form.appendChild(appInput);
+
+                const extInput = document.createElement('input');
+                extInput.type = 'hidden';
+                extInput.name = 'ext';
+                extInput.value = ext;
+                form.appendChild(extInput);
+
+                const codeInput = document.createElement('input');
+                codeInput.type = 'hidden';
+                codeInput.name = 'code';
+                codeInput.value = code;
+                form.appendChild(codeInput);
+
+                form.submit();
+            };
+
+            // Open Output in Notepad (via server or direct local launch)
+            const btnDownload = document.getElementById('btn-download');
+            if (btnDownload) {
+                btnDownload.addEventListener('click', async () => {
+                    const { code } = getCodeToExport('.txt');
+                    showToast("Opening Notepad...", 'info', 2000);
+
+                    // 1. Submit form POST to hidden iframe
+                    postToLocalDesktop('notepad', '.txt', code);
+
+                    // 2. Direct fetch if local
+                    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                    if (isLocal) {
+                        fetch('/open-notepad', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'text/plain' },
+                            body: code
+                        }).then(r => r.json()).then(data => {
+                            if (data && data.success) showToast("Opened directly in Notepad!", 'success');
+                        }).catch(() => {});
+                    } else {
+                        // Fallback download if user has no local server
+                        setTimeout(() => {
+                            try {
+                                const blob = new Blob([code], { type: 'text/plain;charset=utf-8' });
+                                const dlUrl = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = dlUrl;
+                                a.download = 'translated_code.txt';
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(dlUrl);
+                            } catch (_) {}
+                        }, 2500);
+                    }
+                });
+            }
+
+            // Generate PDF Report
+            const btnDownloadPdf = document.getElementById('btn-download-pdf');
+            if (btnDownloadPdf) {
+                btnDownloadPdf.addEventListener('click', () => {
+                    const sourceCode = sourceEditor ? sourceEditor.getValue() : '';
+                    const translatedCode = targetEditor ? targetEditor.getValue() : '';
+                    if (!translatedCode.trim()) {
+                        alert("No code to export. Please translate something first!");
+                        return;
+                    }
+
+                    try {
+                        // Check if jsPDF is available
+                        if (!window.jspdf) {
+                            alert("PDF library is still loading or failed to load. Please wait a moment and try again.");
+                            return;
                         }
+                        const { jsPDF } = window.jspdf;
+                        const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+                        const pageWidth = doc.internal.pageSize.getWidth();
+                        const pageHeight = doc.internal.pageSize.getHeight();
+                        const margin = 15;
+                        const contentWidth = pageWidth - margin * 2;
+                        const footerY = pageHeight - 10;
+                        let y = 57;
+
+                        const addPageHeader = (continuation = false) => {
+                            doc.setFillColor(15, 23, 42);
+                            doc.rect(0, 0, pageWidth, 39, 'F');
+                            doc.setFillColor(6, 182, 212);
+                            doc.rect(0, 39, pageWidth, 1.5, 'F');
+                            doc.setTextColor(255, 255, 255);
+                            doc.setFont('helvetica', 'bold');
+                            doc.setFontSize(19);
+                            doc.text(continuation ? 'Translation Report (continued)' : 'Syn2Sem Translation Report', margin, 19);
+                            doc.setFont('helvetica', 'normal');
+                            doc.setFontSize(9);
+                            doc.setTextColor(203, 213, 225);
+                            doc.text(`${sourceLang.value.toUpperCase()} to ${targetLang.value.toUpperCase()}  |  ${new Date().toLocaleString()}`, margin, 29);
+                        };
+
+                        const addSectionTitle = (title) => {
+                            if (y + 12 > footerY - 5) {
+                                doc.addPage();
+                                addPageHeader(true);
+                                y = 52;
+                            }
+                            doc.setFont('helvetica', 'bold');
+                            doc.setFontSize(11);
+                            doc.setTextColor(15, 23, 42);
+                            doc.text(title, margin, y);
+                            y += 4;
+                            doc.setDrawColor(6, 182, 212);
+                            doc.setLineWidth(0.5);
+                            doc.line(margin, y, margin + contentWidth, y);
+                            y += 7;
+                        };
+
+                        const addCodeSection = (title, code) => {
+                            addSectionTitle(title);
+                            const lines = doc.splitTextToSize(code || 'No source code available.', contentWidth - 8);
+                            const lineHeight = 4.2;
+                            let lineIndex = 0;
+
+                            while (lineIndex < lines.length) {
+                                if (y + lineHeight + 6 > footerY - 8) {
+                                    doc.addPage();
+                                    addPageHeader(true);
+                                    y = 52;
+                                }
+                                const availableLines = Math.max(1, Math.floor((footerY - 8 - y - 6) / lineHeight));
+                                const pageLines = lines.slice(lineIndex, lineIndex + availableLines);
+                                const blockHeight = pageLines.length * lineHeight + 6;
+                                doc.setFillColor(245, 248, 252);
+                                doc.setDrawColor(226, 232, 240);
+                                doc.roundedRect(margin, y - 3, contentWidth, blockHeight, 2, 2, 'FD');
+                                doc.setFont('courier', 'normal');
+                                doc.setFontSize(8.5);
+                                doc.setTextColor(30, 41, 59);
+                                doc.text(pageLines, margin + 4, y + 1);
+                                y += blockHeight + 8;
+                                lineIndex += pageLines.length;
+
+                                if (lineIndex < lines.length) {
+                                    doc.addPage();
+                                    addPageHeader(true);
+                                    y = 52;
+                                }
+                            }
+                        };
+
+                        addPageHeader();
+
                         doc.setFont('helvetica', 'bold');
                         doc.setFontSize(11);
                         doc.setTextColor(15, 23, 42);
-                        doc.text(title, margin, y);
-                        y += 4;
-                        doc.setDrawColor(6, 182, 212);
-                        doc.setLineWidth(0.5);
-                        doc.line(margin, y, margin + contentWidth, y);
-                        y += 7;
-                    };
+                        doc.text('Translation details', margin, y);
+                        y += 6;
+                        doc.setFillColor(240, 249, 255);
+                        doc.setDrawColor(186, 230, 253);
+                        doc.roundedRect(margin, y - 3, contentWidth, 15, 2, 2, 'FD');
+                        doc.setFont('helvetica', 'normal');
+                        doc.setFontSize(10);
+                        doc.setTextColor(51, 65, 85);
+                        doc.text(`Source: ${sourceLang.value.toUpperCase()}`, margin + 5, y + 3);
+                        doc.text(`Target: ${targetLang.value.toUpperCase()}`, margin + 85, y + 3);
+                        y += 22;
 
-                    const addCodeSection = (title, code) => {
-                        addSectionTitle(title);
-                        const lines = doc.splitTextToSize(code || 'No source code available.', contentWidth - 8);
-                        const lineHeight = 4.2;
-                        let lineIndex = 0;
-
-                        while (lineIndex < lines.length) {
-                            if (y + lineHeight + 6 > footerY - 8) {
-                                doc.addPage();
-                                addPageHeader(true);
-                                y = 52;
-                            }
-                            const availableLines = Math.max(1, Math.floor((footerY - 8 - y - 6) / lineHeight));
-                            const pageLines = lines.slice(lineIndex, lineIndex + availableLines);
-                            const blockHeight = pageLines.length * lineHeight + 6;
-                            doc.setFillColor(245, 248, 252);
+                        addSectionTitle('Analysis summary');
+                        const metricValues = [
+                            ['Semantic similarity', document.getElementById('res-score')?.textContent],
+                            ['Syntax status', document.getElementById('res-syntax')?.textContent],
+                            ['Translation confidence', document.getElementById('res-confidence')?.textContent],
+                            ['Semantic gap prediction', document.getElementById('res-gap')?.textContent],
+                            ['Time complexity', document.getElementById('res-time-complexity')?.textContent],
+                            ['Space complexity', document.getElementById('res-space-complexity')?.textContent]
+                        ];
+                        const columnWidth = contentWidth / 2;
+                        metricValues.forEach(([label, value], index) => {
+                            const column = index % 2;
+                            const row = Math.floor(index / 2);
+                            const x = margin + column * columnWidth;
+                            const metricY = y + row * 12;
+                            doc.setFillColor(248, 250, 252);
                             doc.setDrawColor(226, 232, 240);
-                            doc.roundedRect(margin, y - 3, contentWidth, blockHeight, 2, 2, 'FD');
-                            doc.setFont('courier', 'normal');
-                            doc.setFontSize(8.5);
+                            doc.roundedRect(x, metricY - 4, columnWidth - 3, 11, 1.5, 1.5, 'FD');
+                            doc.setFont('helvetica', 'normal');
+                            doc.setFontSize(8);
+                            doc.setTextColor(100, 116, 139);
+                            doc.text(label, x + 3, metricY);
+                            doc.setFont('helvetica', 'bold');
+                            doc.setFontSize(9);
                             doc.setTextColor(30, 41, 59);
-                            doc.text(pageLines, margin + 4, y + 1);
-                            y += blockHeight + 8;
-                            lineIndex += pageLines.length;
+                            doc.text((value || '').trim() || 'Not available', x + 3, metricY + 4);
+                        });
+                        y += 42;
 
-                            if (lineIndex < lines.length) {
-                                doc.addPage();
-                                addPageHeader(true);
-                                y = 52;
-                            }
+                        addCodeSection('Source code', sourceCode);
+                        addCodeSection('Translated code', translatedCode);
+
+                        const pageCount = doc.getNumberOfPages();
+                        for (let page = 1; page <= pageCount; page++) {
+                            doc.setPage(page);
+                            doc.setDrawColor(226, 232, 240);
+                            doc.line(margin, footerY - 3, pageWidth - margin, footerY - 3);
+                            doc.setFont('helvetica', 'normal');
+                            doc.setFontSize(8);
+                            doc.setTextColor(100, 116, 139);
+                            doc.text('Generated by Syn2Sem', margin, footerY);
+                            doc.text(`Page ${page} of ${pageCount}`, pageWidth - margin, footerY, { align: 'right' });
                         }
-                    };
 
-                    addPageHeader();
-
-                    doc.setFont('helvetica', 'bold');
-                    doc.setFontSize(11);
-                    doc.setTextColor(15, 23, 42);
-                    doc.text('Translation details', margin, y);
-                    y += 6;
-                    doc.setFillColor(240, 249, 255);
-                    doc.setDrawColor(186, 230, 253);
-                    doc.roundedRect(margin, y - 3, contentWidth, 15, 2, 2, 'FD');
-                    doc.setFont('helvetica', 'normal');
-                    doc.setFontSize(10);
-                    doc.setTextColor(51, 65, 85);
-                    doc.text(`Source: ${sourceLang.value.toUpperCase()}`, margin + 5, y + 3);
-                    doc.text(`Target: ${targetLang.value.toUpperCase()}`, margin + 85, y + 3);
-                    y += 22;
-
-                    addSectionTitle('Analysis summary');
-                    const metricValues = [
-                        ['Semantic similarity', document.getElementById('res-score')?.textContent],
-                        ['Syntax status', document.getElementById('res-syntax')?.textContent],
-                        ['Translation confidence', document.getElementById('res-confidence')?.textContent],
-                        ['Semantic gap prediction', document.getElementById('res-gap')?.textContent],
-                        ['Time complexity', document.getElementById('res-time-complexity')?.textContent],
-                        ['Space complexity', document.getElementById('res-space-complexity')?.textContent]
-                    ];
-                    const columnWidth = contentWidth / 2;
-                    metricValues.forEach(([label, value], index) => {
-                        const column = index % 2;
-                        const row = Math.floor(index / 2);
-                        const x = margin + column * columnWidth;
-                        const metricY = y + row * 12;
-                        doc.setFillColor(248, 250, 252);
-                        doc.setDrawColor(226, 232, 240);
-                        doc.roundedRect(x, metricY - 4, columnWidth - 3, 11, 1.5, 1.5, 'FD');
-                        doc.setFont('helvetica', 'normal');
-                        doc.setFontSize(8);
-                        doc.setTextColor(100, 116, 139);
-                        doc.text(label, x + 3, metricY);
-                        doc.setFont('helvetica', 'bold');
-                        doc.setFontSize(9);
-                        doc.setTextColor(30, 41, 59);
-                        doc.text((value || '').trim() || 'Not available', x + 3, metricY + 4);
-                    });
-                    y += 42;
-
-                    addCodeSection('Source code', sourceCode);
-                    addCodeSection('Translated code', translatedCode);
-
-                    const pageCount = doc.getNumberOfPages();
-                    for (let page = 1; page <= pageCount; page++) {
-                        doc.setPage(page);
-                        doc.setDrawColor(226, 232, 240);
-                        doc.line(margin, footerY - 3, pageWidth - margin, footerY - 3);
-                        doc.setFont('helvetica', 'normal');
-                        doc.setFontSize(8);
-                        doc.setTextColor(100, 116, 139);
-                        doc.text('Generated by Syn2Sem', margin, footerY);
-                        doc.text(`Page ${page} of ${pageCount}`, pageWidth - margin, footerY, { align: 'right' });
+                        doc.save("Syntax_to_Semantics_Report.pdf");
+                        showToast("PDF Report Downloaded!");
+                    } catch (e) {
+                        console.error("PDF Generation failed:", e);
+                        alert("Error generating PDF. Make sure you are connected to the internet to load the PDF engine.");
                     }
-
-                    doc.save("Syntax_to_Semantics_Report.pdf");
-                    showToast("PDF Report Downloaded!");
-                } catch (e) {
-                    console.error("PDF Generation failed:", e);
-                    alert("Error generating PDF. Make sure you are connected to the internet to load the PDF engine.");
-                }
-            });
-        }
-
-        const langToExt = {
-            python: '.py',
-            java: '.java',
-            c: '.c',
-            cpp: '.cpp',
-            javascript: '.js'
-        };
-        const ideHelperUrl = 'http://127.0.0.1:43127';
-        const openInIde = async (ide, label) => {
-            const code = targetEditor && targetEditor.getValue();
-            if (!code || !code.trim()) {
-                showToast('Translate code before opening it in an IDE.', 'warning');
-                return;
-            }
-
-            let helperReady = false;
-            try {
-                const healthResponse = await fetch(`${ideHelperUrl}/health`);
-                if (!healthResponse.ok) {
-                    throw new Error(`The IDE helper returned status ${healthResponse.status}.`);
-                }
-                const health = await healthResponse.json();
-                if (!health.ready) {
-                    throw new Error('The IDE helper is not ready.');
-                }
-                helperReady = true;
-
-                const response = await fetch(`${ideHelperUrl}/open`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        ide,
-                        language: targetLang.value,
-                        code
-                    })
                 });
-                const result = await response.json().catch(() => ({}));
-                if (!response.ok) {
-                    throw new Error(result.message || `Could not open ${label}.`);
-                }
-                showToast(result.message || `Opened translated code in ${label}.`);
-            } catch (error) {
-                console.error(`${label} companion connection failed:`, error);
-                if (!helperReady) {
-                    window.location.assign('/install-ide-helper.cmd');
-                    showToast('One-time setup started: open the downloaded Syn2Sem installer. It will start the connector automatically when Windows starts. Then click the IDE logo again.', 'warning', 10000);
-                    return;
-                }
-                showToast(`${label} could not open the translated code. ${error.message}`, 'warning', 6500);
             }
-        };
 
-        const btnVscode = document.getElementById('btn-vscode');
-        if (btnVscode) {
-            btnVscode.addEventListener('click', () => openInIde('vscode', 'VS Code'));
-        }
+            const langToExt = {
+                python: '.py',
+                java: '.java',
+                c: '.c',
+                cpp: '.cpp',
+                javascript: '.js'
+            };
 
-        const btnAntigravity = document.getElementById('btn-antigravity');
-        if (btnAntigravity) {
-            btnAntigravity.addEventListener('click', () => openInIde('antigravity', 'Antigravity IDE'));
-        }
+            const openInIde = async (ide, label) => {
+                const { code, ext } = getCodeToExport();
+                const routeName = ide === 'vscode' ? 'open-vscode' : 'open-antigravity';
+                const protocol = ide === 'vscode' ? 'vscode://' : 'antigravity://';
 
-        // Run Code in Console Output
-        const btnRun = document.getElementById('btn-run');
-        const consoleContainer = document.getElementById('console-output-container');
-        const consoleContent = document.getElementById('console-output-content');
-        const btnCloseConsole = document.getElementById('btn-close-console');
-
-        if (btnCloseConsole) {
-            btnCloseConsole.addEventListener('click', () => {
-                consoleContainer.classList.add('hidden');
-            });
-        }
-
-        if (btnRun) {
-            btnRun.addEventListener('click', async () => {
-                const val = targetEditor.getValue();
-                if (!val) {
-                    alert("No code to run!");
-                    return;
-                }
-
-                if (targetLang.value === 'cpp' || targetLang.value === 'javascript') {
-                    showToast("🚧 We are currently working on C++ and JavaScript support! Full support is active for Java, Python, and C.", 'warning', 4500);
-                }
-                
-                consoleContainer.classList.remove('hidden');
-                consoleContent.textContent = "Executing code...\n";
-                
+                // 1. Copy code to clipboard as instant backup
                 try {
-                    // Auto-detect target code language to avoid running with wrong runtime
-                    let runUrl = `/run-code?lang=${targetLang.value}`;
-                    try {
-                        const detectedRunLang = autoDetectLanguage ? autoDetectLanguage(val) : null;
-                        if (detectedRunLang && detectedRunLang !== targetLang.value) {
-                            runUrl += `&autoDetectRun=true`;
-                        }
-                    } catch (e) { /* ignore detection errors */ }
-
-                    const runSettings = readSavedAiSettings();
-                    const runHeaders = {};
-                    if (runSettings.runner) runHeaders['X-Execution-Runner'] = runSettings.runner;
-                    if (runSettings.pistonKey) runHeaders['X-Piston-API-Key'] = runSettings.pistonKey;
-
-                    const response = await fetch(runUrl, {
-                        method: 'POST',
-                        headers: runHeaders,
-                        body: val
-                    });
-                    
-                    if (response.ok) {
-                        const result = await response.json();
-                        if (result.error) {
-                            consoleContent.innerHTML = `<span class="text-red">${result.output}</span>`;
-                        } else {
-                            consoleContent.textContent = result.output || "Code executed successfully (no output).";
-                        }
-                    } else {
-                        consoleContent.innerHTML = `<span class="text-red">Failed to execute. Is the server running?</span>`;
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(code).catch(() => {});
                     }
-                } catch (e) {
-                    console.error("Execution failed:", e);
-                    consoleContent.innerHTML = `<span class="text-red">Connection error. You must run 'node server.js' and view on localhost:3000 to execute code.</span>`;
+                } catch (_) {}
+
+                showToast(`Opening in ${label}...`, 'info', 2500);
+
+                // 2. Submit form POST to hidden iframe (bypasses HTTPS PNA restrictions)
+                postToLocalDesktop(ide, ext, code);
+
+                // 3. Direct fetch if local
+                const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                if (isLocal) {
+                    fetch(`/${routeName}?ext=${ext}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain' },
+                        body: code
+                    }).then(r => r.json()).then(data => {
+                        if (data && data.success) showToast(`Opened directly in ${label}!`, 'success');
+                    }).catch(() => {});
+                } else {
+                    // Fallback for remote web deployment without local server
+                    setTimeout(() => {
+                        try {
+                            const link = document.createElement('a');
+                            link.href = protocol;
+                            link.rel = 'noopener';
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                        } catch (_) {}
+                    }, 1200);
+
+                    setTimeout(() => {
+                        try {
+                            const blob = new Blob([code], { type: 'text/plain' });
+                            const url = URL.createObjectURL(blob);
+                            const dl = document.createElement('a');
+                            dl.href = url;
+                            dl.download = `translated_code${ext}`;
+                            document.body.appendChild(dl);
+                            dl.click();
+                            document.body.removeChild(dl);
+                            URL.revokeObjectURL(url);
+                        } catch (_) {}
+                    }, 2500);
                 }
-                consoleContent.scrollIntoView({ behavior: 'smooth', block: 'end' });
-            });
-        }
+            };
+
+            const btnVscode = document.getElementById('btn-vscode');
+            if (btnVscode) {
+                btnVscode.addEventListener('click', () => openInIde('vscode', 'VS Code'));
+            }
+
+            const btnAntigravity = document.getElementById('btn-antigravity');
+            if (btnAntigravity) {
+                btnAntigravity.addEventListener('click', () => openInIde('antigravity', 'Antigravity IDE'));
+            }
+
+            // Run Code in Console Output
+            const btnRun = document.getElementById('btn-run');
+            const consoleContainer = document.getElementById('console-output-container');
+            const consoleContent = document.getElementById('console-output-content');
+            const btnCloseConsole = document.getElementById('btn-close-console');
+
+            if (btnCloseConsole) {
+                btnCloseConsole.addEventListener('click', () => {
+                    consoleContainer.classList.add('hidden');
+                });
+            }
+
+            if (btnRun) {
+                btnRun.addEventListener('click', async () => {
+                    const val = targetEditor.getValue();
+                    if (!val) {
+                        alert("No code to run!");
+                        return;
+                    }
+
+                    if (targetLang.value === 'cpp' || targetLang.value === 'javascript') {
+                        showToast("🚧 We are currently working on C++ and JavaScript support! Full support is active for Java, Python, and C.", 'warning', 4500);
+                    }
+
+                    consoleContainer.classList.remove('hidden');
+                    consoleContent.textContent = "Executing code...\n";
+
+                    try {
+                        // Auto-detect target code language to avoid running with wrong runtime
+                        let runUrl = `/run-code?lang=${targetLang.value}`;
+                        try {
+                            const detectedRunLang = autoDetectLanguage ? autoDetectLanguage(val) : null;
+                            if (detectedRunLang && detectedRunLang !== targetLang.value) {
+                                runUrl += `&autoDetectRun=true`;
+                            }
+                        } catch (e) { /* ignore detection errors */ }
+
+                        const response = await fetch(runUrl, {
+                            method: 'POST',
+                            body: val
+                        });
+
+                        if (response.ok) {
+                            const result = await response.json();
+                            if (result.error) {
+                                consoleContent.innerHTML = `<span class="text-red">${result.output}</span>`;
+                            } else {
+                                consoleContent.textContent = result.output || "Code executed successfully (no output).";
+                            }
+                        } else {
+                            consoleContent.innerHTML = `<span class="text-red">Failed to execute. Is the server running?</span>`;
+                        }
+                    } catch (e) {
+                        console.error("Execution failed:", e);
+                        consoleContent.innerHTML = `<span class="text-red">Connection error. You must run 'node server.js' and view on localhost:3000 to execute code.</span>`;
+                    }
+                    consoleContent.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                });
+            }
         } catch (err) {
             alert("JS MONACO REQ ERROR:\n" + err.message + "\n" + err.stack);
         }
@@ -2091,8 +2008,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     title: `Syn2Sem Translated Code (${targetLang.toUpperCase()})`,
                     text: translatedCode,
                 })
-                .then(() => console.log('Successful share'))
-                .catch((error) => console.log('Error sharing', error));
+                    .then(() => console.log('Successful share'))
+                    .catch((error) => console.log('Error sharing', error));
             } else {
                 // Fallback: Copy to clipboard
                 navigator.clipboard.writeText(translatedCode);

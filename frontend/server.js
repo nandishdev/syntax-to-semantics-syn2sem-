@@ -170,9 +170,11 @@ function getGeminiKeyPool(overrideKey) {
     return Array.from(new Set(keys));
 }
 
+// getActiveAIConfig — used ONLY for code translation (not the compiler)
 function getActiveAIConfig(overrideKey, overrideProvider, overrideModel) {
-    let provider = (overrideProvider || process.env.AI_PROVIDER || '').toLowerCase();
-    let model = overrideModel || process.env.AI_MODEL || '';
+    // Prefer dedicated TRANSLATION_* vars; fall back to legacy AI_* vars for backward compat
+    let provider = (overrideProvider || process.env.TRANSLATION_PROVIDER || process.env.AI_PROVIDER || '').toLowerCase();
+    let model = overrideModel || process.env.TRANSLATION_MODEL || process.env.AI_MODEL || '';
 
     if (!provider) {
         provider = 'gemini';
@@ -186,17 +188,19 @@ function getActiveAIConfig(overrideKey, overrideProvider, overrideModel) {
         else if (provider === 'openrouter') model = 'meta-llama/llama-3.3-70b-instruct';
     }
 
+    // Dedicated translation key takes top priority; Gemini key pool next; then legacy keys
+    const dedicatedTranslationKey = process.env.TRANSLATION_API_KEY || '';
     const providerKey = provider === 'gemini'
-        ? getGeminiKeyPool()[0] || process.env.AI_API_KEY || process.env.API_KEY || ''
+        ? dedicatedTranslationKey || getGeminiKeyPool()[0] || process.env.AI_API_KEY || process.env.API_KEY || ''
         : provider === 'groq'
-            ? process.env.GROQ_API_KEY || process.env.AI_API_KEY || process.env.API_KEY || ''
+            ? dedicatedTranslationKey || process.env.GROQ_API_KEY || process.env.AI_API_KEY || process.env.API_KEY || ''
             : provider === 'openai'
-                ? process.env.OPENAI_API_KEY || process.env.AI_API_KEY || process.env.API_KEY || ''
+                ? dedicatedTranslationKey || process.env.OPENAI_API_KEY || process.env.AI_API_KEY || process.env.API_KEY || ''
                 : provider === 'anthropic' || provider === 'claude'
-                    ? process.env.ANTHROPIC_API_KEY || process.env.AI_API_KEY || process.env.API_KEY || ''
+                    ? dedicatedTranslationKey || process.env.ANTHROPIC_API_KEY || process.env.AI_API_KEY || process.env.API_KEY || ''
                     : provider === 'openrouter'
-                        ? process.env.OPENROUTER_API_KEY || process.env.AI_API_KEY || process.env.API_KEY || ''
-                        : process.env.AI_API_KEY || process.env.API_KEY || '';
+                        ? dedicatedTranslationKey || process.env.OPENROUTER_API_KEY || process.env.AI_API_KEY || process.env.API_KEY || ''
+                        : dedicatedTranslationKey || process.env.AI_API_KEY || process.env.API_KEY || '';
     const key = overrideKey || providerKey;
 
     return { key, provider, model };
@@ -271,7 +275,7 @@ async function callGemini(apiKey, model, prompt) {
             } catch (e) {
                 const errMsg = String(e.message || '').toLowerCase();
                 const isLimit = errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('resource_exhausted') || errMsg.includes('rate limit') || errMsg.includes('limit exceeded');
-                
+
                 if (isLimit) {
                     console.warn(`[Key Failover] Key #${keyIdx + 1} exceeded its rate/quota limit. Auto-switching to next key...`);
                     keyLimitHit = true;
@@ -590,7 +594,7 @@ CRITICAL RULES:
         try {
             const fallbackCode = syn2SemTranslateCore(sourceCode, sourceLang, targetLang);
             if (fallbackCode) return callback(fallbackCode, 'ast', 'AST Compiler');
-        } catch (fbErr) {}
+        } catch (fbErr) { }
         return callback(`// Translation failed: ${err.message}`, 'error');
     }
 }
@@ -791,8 +795,8 @@ function calculateComplexity(node) {
     let volume = vocabulary > 0 ? (length * Math.log2(vocabulary)).toFixed(2) : "0.00";
     let difficulty = (n2 > 0) ? ((n1 / 2) * (N2 / n2)).toFixed(2) : "0.00";
 
-    return { 
-        timeComplexity, timeExplanation, 
+    return {
+        timeComplexity, timeExplanation,
         spaceComplexity, spaceExplanation,
         cyclomaticComplexity,
         halsteadVolume: volume,
@@ -1007,7 +1011,7 @@ function syn2SemTranslateCore(code, sourceLang, targetLang) {
             b = b.replace(/(\w+)\s+if\s+(.+?)\s+else\s+(.+)/g, '$2 ? $1 : $3');
             // Python exception to C++
             b = b.replace(/try:/g, 'try {').replace(/except\s+(\w+)\s+as\s+(\w+):/g, '} catch (const $1& $2) {');
-            
+
             b = b.replace(/console\.log\s*\(([^)]*)\)/g, 'std::cout << $1 << std::endl');
             b = b.replace(/console\.error\s*\(([^)]*)\)/g, 'std::cerr << $1 << std::endl');
             b = b.replace(/\.push\(([^)]*)\)/g, '.push_back($1)');
@@ -1024,7 +1028,7 @@ function syn2SemTranslateCore(code, sourceLang, targetLang) {
             b = b.replace(/(\w+)\s+if\s+(.+?)\s+else\s+(.+)/g, '$2 ? $1 : $3');
             // Python f-string to C sprintf (mock implementation for common cases)
             b = b.replace(/f"([^"]*)\{([^}]+)\}([^"]*)"/g, 'sprintf(buf, "$1%s$3", $2)');
-            
+
             b = b.replace(/console\.log\s*\(([^)]*)\)/g, 'printf("%d\\n", $1)');
             b = b.replace(/console\.error\s*\(([^)]*)\)/g, 'fprintf(stderr, "%d\\n", $1)');
             b = b.replace(/console\.table\s*\(([^)]*)\)/g, 'printf("Table: %d\\n", $1)');
@@ -1050,12 +1054,12 @@ function syn2SemTranslateCore(code, sourceLang, targetLang) {
             b = b.replace(/\bfalse\b/g, 'False').replace(/\btrue\b/g, 'True').replace(/\bnull\b/g, 'None');
             b = b.replace(/const\s+|let\s+|var\s+/g, '');
             b = b.replace(/===|==/g, '==').replace(/!==|!=/g, '!=');
-            
+
             // C/JS Ternary to Python (simple match)
             b = b.replace(/(.+?)\s*\?\s*(.+?)\s*:\s*(.+)/g, '$2 if $1 else $3');
             // JS exception to Python
             b = b.replace(/try\s*{/g, 'try:').replace(/}\s*catch\s*\(([^)]+)\)\s*{/g, 'except Exception as $1:');
-            
+
             b = b.replace(/\.push\(([^)]*)\)/g, '.append($1)');
             b = b.replace(/\.length/g, 'len(self.$&)').replace(/\.size\(\)/g, 'len(self.$&)');
             b = b.replace(/new Map\(\)/g, '{}').replace(/new Set\(\)/g, 'set()').replace(/new Array\(\)/g, '[]');
@@ -1068,7 +1072,7 @@ function syn2SemTranslateCore(code, sourceLang, targetLang) {
             b = b.replace(/(\w+)\s+if\s+(.+?)\s+else\s+(.+)/g, '$2 ? $1 : $3');
             // Python exception to Java
             b = b.replace(/try:/g, 'try {').replace(/except\s+(\w+)\s+as\s+(\w+):/g, '} catch (Exception $2) {');
-            
+
             b = b.replace(/console\.log\s*\(([^)]*)\)/g, 'System.out.println($1)');
             b = b.replace(/console\.error\s*\(([^)]*)\)/g, 'System.err.println($1)');
             b = b.replace(/\bfalse\b/g, 'false').replace(/\btrue\b/g, 'true').replace(/\bnull\b/g, 'null');
@@ -1084,7 +1088,7 @@ function syn2SemTranslateCore(code, sourceLang, targetLang) {
             b = b.replace(/\[(\w+)\s+for\s+\1\s+in\s+(\w+)\]/g, '$2.map($1 => $1)');
             // Python exception to JS
             b = b.replace(/try:/g, 'try {').replace(/except\s+(\w+)\s+as\s+(\w+):/g, '} catch ($2) {');
-            
+
             b = b.replace(/System\.out\.println\s*\(([^)]*)\)/g, 'console.log($1)');
             b = b.replace(/System\.err\.println\s*\(([^)]*)\)/g, 'console.error($1)');
             b = b.replace(/\bprint\s*\(([^)]*)\)/g, 'console.log($1)');
@@ -2238,7 +2242,7 @@ function sanitizeTargetSyntax(code, targetLang) {
                 if (errCount === 0) {
                     return code;
                 }
-            } catch (e) {}
+            } catch (e) { }
         }
 
         // Only cleanup braces from AST output if braces are NOT part of dictionaries or sets
@@ -2448,9 +2452,17 @@ async function executeViaCloudCompiler(lang, code, stdin) {
         stdin: stdin || ''
     });
 
-    const res = await fetch('https://ce.judge0.com/submissions?wait=true', {
+    // Build Judge0 request headers — include API key if configured
+    const judge0Headers = { 'Content-Type': 'application/json' };
+    const judge0Key = process.env.JUDGE0_API_KEY || '';
+    if (judge0Key) {
+        judge0Headers['X-Auth-Token'] = judge0Key;
+    }
+
+    const judge0Host = process.env.JUDGE0_HOST || 'https://ce.judge0.com';
+    const res = await fetch(`${judge0Host}/submissions?wait=true`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: judge0Headers,
         body: payload,
         signal: AbortSignal.timeout(15000)
     });
@@ -2662,34 +2674,167 @@ function readAssetSafe(filename) {
             if (fs.existsSync(p)) {
                 return fs.readFileSync(p);
             }
-        } catch (_) {}
+        } catch (_) { }
     }
     return null;
 }
 
-try { preloadedStaticAssets['index.html'] = readAssetSafe('index.html'); } catch (_) {}
-try { preloadedStaticAssets['styles.css'] = readAssetSafe('styles.css'); } catch (_) {}
-try { preloadedStaticAssets['script.js'] = readAssetSafe('script.js'); } catch (_) {}
-try { preloadedStaticAssets['ide-companion.js'] = readAssetSafe('ide-companion.js'); } catch (_) {}
-try { preloadedStaticAssets['ide-helper-install.ps1'] = readAssetSafe('ide-helper-install.ps1'); } catch (_) {}
-try { preloadedStaticAssets['install-ide-helper.cmd'] = readAssetSafe('install-ide-helper.cmd'); } catch (_) {}
+try { preloadedStaticAssets['index.html'] = readAssetSafe('index.html'); } catch (_) { }
+try { preloadedStaticAssets['styles.css'] = readAssetSafe('styles.css'); } catch (_) { }
+try { preloadedStaticAssets['script.js'] = readAssetSafe('script.js'); } catch (_) { }
+try { preloadedStaticAssets['ide-companion.js'] = readAssetSafe('ide-companion.js'); } catch (_) { }
+try { preloadedStaticAssets['ide-helper-install.ps1'] = readAssetSafe('ide-helper-install.ps1'); } catch (_) { }
+try { preloadedStaticAssets['install-ide-helper.cmd'] = readAssetSafe('install-ide-helper.cmd'); } catch (_) { }
+
+function launchNotepadFile(filePath, callback) {
+    const isWindows = process.platform === 'win32';
+    if (isWindows) {
+        const visibleLauncher = path.join(__dirname, 'launch_visible.exe');
+        if (fs.existsSync(visibleLauncher)) {
+            try {
+                const child = spawn(visibleLauncher, ['notepad.exe', filePath], { detached: true, stdio: 'ignore' });
+                child.unref();
+                if (callback) callback(null);
+                return;
+            } catch (vErr) {
+                console.warn('[Visible Launcher Notepad Error]', vErr.message);
+            }
+        }
+        try {
+            const child = spawn('notepad.exe', [filePath], { detached: true, stdio: 'ignore' });
+            child.unref();
+            setTimeout(() => {
+                const ps = `powershell -NoProfile -WindowStyle Hidden -Command "$w = New-Object -ComObject WScript.Shell; $w.AppActivate('Notepad'); $w.SendKeys('%')"`;
+                exec(ps, { windowsHide: true }, () => { });
+            }, 350);
+            if (callback) callback(null);
+        } catch (err) {
+            console.error('[Launch Exception Notepad]:', err.message);
+            if (callback) callback(err);
+        }
+    } else {
+        if (callback) callback(null);
+    }
+}
+
+function launchIdeFile(targetIde, filePath, callback) {
+    const isWindows = process.platform === 'win32';
+    const cleanEnv = { ...process.env };
+    delete cleanEnv.ELECTRON_RUN_AS_NODE;
+    delete cleanEnv.ELECTRON_NO_ASAR;
+
+    let launcher = '';
+    let windowKeyword = '';
+    const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
+
+    if (targetIde === 'vscode') {
+        const candidates = [
+            path.join(localAppData, 'Programs', 'Microsoft VS Code', 'Code.exe'),
+            'C:\\Program Files\\Microsoft VS Code\\Code.exe',
+            path.join(localAppData, 'Programs', 'Microsoft VS Code', 'bin', 'code.cmd'),
+            'C:\\Program Files\\Microsoft VS Code\\bin\\code.cmd'
+        ];
+        launcher = candidates.find(p => fs.existsSync(p)) || 'code';
+        windowKeyword = 'Visual Studio Code';
+    } else if (targetIde === 'antigravity') {
+        const candidates = [
+            'D:\\Antigravity IDE\\Antigravity IDE.exe',
+            path.join(localAppData, 'Programs', 'Antigravity IDE', '_', 'Antigravity IDE.exe'),
+            path.join(localAppData, 'Programs', 'Antigravity IDE', 'Antigravity IDE.exe'),
+            'D:\\Antigravity IDE\\bin\\antigravity-ide.cmd',
+            path.join(localAppData, 'Programs', 'Antigravity IDE', '_', 'bin', 'antigravity-ide.cmd')
+        ];
+        launcher = candidates.find(p => fs.existsSync(p)) || 'antigravity';
+        windowKeyword = 'Antigravity';
+    }
+
+    if (isWindows) {
+        const visibleLauncher = path.join(__dirname, 'launch_visible.exe');
+        if (fs.existsSync(visibleLauncher)) {
+            try {
+                const child = spawn(visibleLauncher, [launcher, '-r', '-g', filePath], { detached: true, stdio: 'ignore', env: cleanEnv });
+                child.unref();
+                setTimeout(() => {
+                    const ps = `powershell -NoProfile -WindowStyle Hidden -Command "$w = New-Object -ComObject WScript.Shell; $w.AppActivate('${windowKeyword}'); $w.AppActivate('${targetIde}'); $w.SendKeys('%')"`;
+                    exec(ps, { windowsHide: true }, () => { });
+                }, 400);
+                if (callback) callback(null);
+                return;
+            } catch (vErr) {
+                console.warn('[Visible Launcher Error]', vErr.message);
+            }
+        }
+
+        const isCmd = launcher.endsWith('.cmd') || launcher.endsWith('.bat');
+        const cmdExe = process.env.COMSPEC || 'cmd.exe';
+        const args = isCmd ? ['/c', launcher, '-r', '-g', `${filePath}:1:1`] : ['-r', '-g', filePath];
+
+        try {
+            const child = isCmd
+                ? spawn(cmdExe, args, { detached: true, stdio: 'ignore', env: cleanEnv, windowsHide: true })
+                : spawn(launcher, args, { detached: true, stdio: 'ignore', env: cleanEnv, windowsHide: false });
+
+            child.on('error', (err) => {
+                console.error(`[Launch Error] ${targetIde}:`, err.message);
+                if (callback) callback(err);
+            });
+            child.unref();
+
+            // Bring the IDE window to the active foreground on Windows
+            setTimeout(() => {
+                const ps = `powershell -NoProfile -WindowStyle Hidden -Command "$w = New-Object -ComObject WScript.Shell; $w.AppActivate('${windowKeyword}'); $w.AppActivate('${targetIde}'); $w.SendKeys('%')"`;
+                exec(ps, { windowsHide: true }, () => { });
+            }, 350);
+
+            if (callback) callback(null);
+        } catch (err) {
+            console.error(`[Launch Exception] ${targetIde}:`, err.message);
+            if (callback) callback(err);
+        }
+    } else {
+        try {
+            const child = spawn(launcher, ['-r', filePath], { detached: true, stdio: 'ignore', env: cleanEnv });
+            child.unref();
+            if (callback) callback(null);
+        } catch (err) {
+            if (callback) callback(err);
+        }
+    }
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // HTTP Server + Routes
 // ═══════════════════════════════════════════════════════════════════════════════
 const server = http.createServer((request, response) => {
+    // Enable CORS and Private Network Access so the deployed website can trigger local IDE launches
+    response.setHeader('Access-Control-Allow-Origin', '*');
+    response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    response.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-execution-runner, x-piston-api-key');
+    response.setHeader('Access-Control-Allow-Private-Network', 'true');
+    if (request.method === 'OPTIONS') {
+        response.writeHead(204);
+        return response.end();
+    }
 
     // ── Open Notepad ─────────────────────────────────────────────────────────
     if (request.url === '/open-notepad' && request.method === 'POST') {
+        if (process.env.VERCEL) {
+            response.writeHead(501, { 'Content-Type': 'application/json' });
+            response.end(JSON.stringify({ success: false, message: "Cloud deployment cannot launch local desktop Notepad. Use local server." }));
+            return;
+        }
         let body = '';
         request.on('data', chunk => { body += chunk.toString(); });
         request.on('end', () => {
+            const content = body || "// Syn2Sem Workspace\n";
             const tempFilePath = path.join(os.tmpdir(), `translated_code_${Date.now()}.txt`);
-            fs.writeFile(tempFilePath, body, (err) => {
+            fs.writeFile(tempFilePath, content, (err) => {
                 if (err) { response.writeHead(500); response.end("Error writing file"); return; }
-                exec(`start notepad.exe "${tempFilePath}"`);
+                launchNotepadFile(tempFilePath, (launchErr) => {
+                    if (launchErr) console.warn('[Open Notepad Error]', launchErr.message);
+                });
                 response.writeHead(200, { 'Content-Type': 'application/json' });
-                response.end(JSON.stringify({ success: true, message: "Opened in Notepad" }));
+                response.end(JSON.stringify({ success: true, message: "Opened in Notepad", filePath: tempFilePath }));
             });
         });
         return;
@@ -2702,10 +2847,13 @@ const server = http.createServer((request, response) => {
         let body = '';
         request.on('data', chunk => { body += chunk.toString(); });
         request.on('end', () => {
+            const content = body || "// Syn2Sem Workspace\n";
             const tempFilePath = path.join(os.tmpdir(), `translated_code_${Date.now()}${ext}`);
-            fs.writeFile(tempFilePath, body, (err) => {
+            fs.writeFile(tempFilePath, content, (err) => {
                 if (err) { response.writeHead(500); response.end("Error writing file"); return; }
-                exec(`code "${tempFilePath}"`);
+                launchIdeFile('vscode', tempFilePath, (launchErr) => {
+                    if (launchErr) console.warn('[Open VS Code Error]', launchErr.message);
+                });
                 response.writeHead(200, { 'Content-Type': 'application/json' });
                 response.end(JSON.stringify({ success: true, message: "Opened in VS Code" }));
             });
@@ -2720,12 +2868,62 @@ const server = http.createServer((request, response) => {
         let body = '';
         request.on('data', chunk => { body += chunk.toString(); });
         request.on('end', () => {
+            const content = body || "// Syn2Sem Workspace\n";
             const tempFilePath = path.join(os.tmpdir(), `translated_code_${Date.now()}${ext}`);
-            fs.writeFile(tempFilePath, body, (err) => {
+            fs.writeFile(tempFilePath, content, (err) => {
                 if (err) { response.writeHead(500); response.end("Error writing file"); return; }
-                exec(`antigravity "${tempFilePath}"`);
+                launchIdeFile('antigravity', tempFilePath, (launchErr) => {
+                    if (launchErr) console.warn('[Open Antigravity Error]', launchErr.message);
+                });
                 response.writeHead(200, { 'Content-Type': 'application/json' });
                 response.end(JSON.stringify({ success: true, message: "Opened in Antigravity IDE" }));
+            });
+        });
+        return;
+    }
+
+    // ── Quick Launch (Unified endpoint for Form POST & JSON) ───────────────────
+    if (request.url.startsWith('/quick-launch') && (request.method === 'POST' || request.method === 'GET')) {
+        if (process.env.VERCEL) {
+            response.writeHead(501, { 'Content-Type': 'text/html' });
+            return response.end("<!DOCTYPE html><html><body><p>Cloud deployment cannot launch local desktop apps.</p></body></html>");
+        }
+        let body = '';
+        request.on('data', chunk => { body += chunk.toString(); });
+        request.on('end', () => {
+            let app = 'notepad';
+            let ext = '.txt';
+            let code = '// Syn2Sem Workspace\n';
+
+            if (request.headers['content-type'] && request.headers['content-type'].includes('application/json')) {
+                try {
+                    const parsed = JSON.parse(body || '{}');
+                    app = parsed.app || app;
+                    ext = parsed.ext || ext;
+                    code = parsed.code || code;
+                } catch (_) { }
+            } else {
+                try {
+                    const params = new URLSearchParams(body);
+                    if (params.has('app')) app = params.get('app') || app;
+                    if (params.has('ext')) ext = params.get('ext') || ext;
+                    if (params.has('code')) code = params.get('code') || code;
+                } catch (_) { }
+            }
+
+            const extNormalized = ext.startsWith('.') ? ext : `.${ext}`;
+            const tempFilePath = path.join(os.tmpdir(), `syn2sem_${app}_${Date.now()}${extNormalized}`);
+
+            fs.writeFile(tempFilePath, code, (err) => {
+                if (!err) {
+                    if (app === 'notepad') {
+                        launchNotepadFile(tempFilePath);
+                    } else {
+                        launchIdeFile(app, tempFilePath);
+                    }
+                }
+                response.writeHead(200, { 'Content-Type': 'text/html' });
+                response.end(`<!DOCTYPE html><html><body><script>if(window.parent)window.parent.postMessage({launched:true,app:"${app}"},"*");</script><p>Launched ${app}</p></body></html>`);
             });
         });
         return;
@@ -2890,13 +3088,17 @@ const server = http.createServer((request, response) => {
         const cfg = getActiveAIConfig();
         const runner = (process.env.EXECUTION_RUNNER || 'piston').toLowerCase();
         const pistonUrl = process.env.PISTON_URL || '';
+        const judge0Key = process.env.JUDGE0_API_KEY || '';
+        const judge0Host = process.env.JUDGE0_HOST || 'https://ce.judge0.com';
         response.writeHead(200, { 'Content-Type': 'application/json' });
         return response.end(JSON.stringify({
             configured: Boolean(cfg.key),
             provider: cfg.provider || 'none',
             model: cfg.model || 'none',
             runner,
-            pistonUrl
+            pistonUrl,
+            judge0Configured: Boolean(judge0Key),
+            judge0Host
         }));
     }
 
@@ -2906,9 +3108,11 @@ const server = http.createServer((request, response) => {
         request.on('end', () => {
             try {
                 const parsed = JSON.parse(body || '{}');
-                const { apiKey, provider, model, runner, pistonUrl, pistonKey } = parsed;
+                const { apiKey, provider, model, runner, pistonUrl, pistonKey,
+                    translationApiKey, translationProvider, translationModel,
+                    judge0ApiKey, judge0Host } = parsed;
                 if (process.env.VERCEL) {
-                    if (apiKey) {
+                    if (apiKey || translationApiKey || judge0ApiKey) {
                         response.writeHead(400, { 'Content-Type': 'application/json' });
                         return response.end(JSON.stringify({
                             error: true,
@@ -2921,9 +3125,28 @@ const server = http.createServer((request, response) => {
                         message: 'Browser settings saved. API keys are not stored on the server.'
                     }));
                 }
+                // Legacy shared key (kept for backward compat)
                 if (apiKey !== undefined) {
                     saveEnvVar('AI_API_KEY', apiKey);
                 }
+                // Dedicated translation-only keys
+                if (translationApiKey !== undefined) {
+                    saveEnvVar('TRANSLATION_API_KEY', translationApiKey);
+                }
+                if (translationProvider !== undefined) {
+                    saveEnvVar('TRANSLATION_PROVIDER', translationProvider);
+                }
+                if (translationModel !== undefined) {
+                    saveEnvVar('TRANSLATION_MODEL', translationModel);
+                }
+                // Dedicated compiler (Judge0) key
+                if (judge0ApiKey !== undefined) {
+                    saveEnvVar('JUDGE0_API_KEY', judge0ApiKey);
+                }
+                if (judge0Host !== undefined) {
+                    saveEnvVar('JUDGE0_HOST', judge0Host);
+                }
+                // Runner / Piston settings
                 if (provider !== undefined) {
                     saveEnvVar('AI_PROVIDER', provider);
                 }
@@ -2946,6 +3169,53 @@ const server = http.createServer((request, response) => {
                 return response.end(JSON.stringify({ error: true, message: e.message }));
             }
         });
+        return;
+    }
+
+    // ── Check Compiler (Judge0) API Key ───────────────────────────────────────
+    if (request.url === '/check-compiler-key' && request.method === 'GET') {
+        const judge0Key = process.env.JUDGE0_API_KEY || '';
+        const judge0Host = process.env.JUDGE0_HOST || 'https://ce.judge0.com';
+        const headers = { 'Content-Type': 'application/json' };
+        if (judge0Key) headers['X-Auth-Token'] = judge0Key;
+
+        // Send a minimal Python hello-world submission to Judge0 and check the response
+        const testPayload = JSON.stringify({
+            language_id: 100, // Python 3.12
+            source_code: 'print("hello")',
+            stdin: ''
+        });
+
+        (async () => {
+            response.writeHead(200, { 'Content-Type': 'application/json' });
+            if (!judge0Key) {
+                return response.end(JSON.stringify({
+                    ok: false,
+                    configured: false,
+                    message: 'No JUDGE0_API_KEY configured. Add it via /set-api-key or the .env file.'
+                }));
+            }
+            try {
+                const res = await fetch(`${judge0Host}/submissions?wait=true`, {
+                    method: 'POST',
+                    headers,
+                    body: testPayload,
+                    signal: AbortSignal.timeout(15000)
+                });
+                if (!res.ok) {
+                    const txt = await res.text();
+                    return response.end(JSON.stringify({ ok: false, configured: true, status: res.status, message: `Judge0 rejected the key: HTTP ${res.status} — ${txt.slice(0, 200)}` }));
+                }
+                const data = await res.json();
+                const stdout = (data.stdout || '').trim();
+                if (stdout === 'hello') {
+                    return response.end(JSON.stringify({ ok: true, configured: true, message: `Judge0 API key is valid and working! (host: ${judge0Host})` }));
+                }
+                return response.end(JSON.stringify({ ok: false, configured: true, message: `Unexpected output from Judge0: "${stdout}"`, raw: data }));
+            } catch (err) {
+                return response.end(JSON.stringify({ ok: false, configured: true, message: `Judge0 request failed: ${err.message}` }));
+            }
+        })();
         return;
     }
 
@@ -3008,10 +3278,6 @@ const server = http.createServer((request, response) => {
                     return n;
                 }
 
-                const reqApiKey = urlObj.searchParams.get('apiKey') || request.headers['x-api-keys'] || request.headers['x-api-key'] || '';
-                const reqProvider = urlObj.searchParams.get('provider') || request.headers['x-api-provider'] || '';
-                const reqModel = urlObj.searchParams.get('model') || request.headers['x-api-model'] || '';
-
                 const finalize = (rawFinalCode, engine, engineDetail) => {
                     if (engine === 'error') {
                         return response.end(JSON.stringify({
@@ -3043,9 +3309,6 @@ const server = http.createServer((request, response) => {
                     sourceLang,
                     targetLang,
                     sourceCode: body,
-                    apiKey: reqApiKey,
-                    provider: reqProvider,
-                    model: reqModel,
                     callback: finalize
                 });
             }
