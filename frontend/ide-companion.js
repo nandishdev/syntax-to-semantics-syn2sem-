@@ -12,14 +12,17 @@ const EXTENSIONS = {
     java: '.java',
     c: '.c',
     cpp: '.cpp',
-    javascript: '.js'
+    javascript: '.js',
+    text: '.txt'
 };
 const IDE_COMMANDS = {
     vscode: { commands: ['code'], label: 'VS Code' },
-    antigravity: { commands: ['antigravity', 'antigravity-ide'], label: 'Antigravity IDE' }
+    antigravity: { commands: ['antigravity', 'antigravity-ide'], label: 'Antigravity IDE' },
+    notepad: { commands: ['notepad'], label: 'Notepad' }
 };
 const ALLOWED_ORIGINS = new Set([
     'https://syn2sem.vercel.app',
+    'https://syntax-to-semantics.vercel.app',
     'http://localhost:3000',
     'http://127.0.0.1:3000'
 ]);
@@ -60,6 +63,9 @@ function resolveCommand(commands, label) {
                 path.join(localAppData, 'Programs', 'Antigravity IDE', 'bin', 'antigravity-ide.cmd'),
                 path.join(localAppData, 'Programs', 'Antigravity', 'bin', 'antigravity.cmd')
             );
+        }
+        if (commands.includes('notepad')) {
+            candidates.push(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'notepad.exe'));
         }
     }
 

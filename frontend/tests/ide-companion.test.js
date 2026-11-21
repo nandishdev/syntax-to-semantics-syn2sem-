@@ -79,6 +79,7 @@ async function main() {
         const openedInAntigravity = await request(port, {
             method: 'POST',
             url: '/open',
+            origin: 'https://syntax-to-semantics.vercel.app',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ide: 'antigravity', language: 'cpp', code: 'int main() { return 0; }' })
         });
@@ -87,6 +88,18 @@ async function main() {
         assert.strictEqual(launched[1].ide, 'antigravity');
         assert.strictEqual(path.extname(launched[1].filePath), '.cpp');
         assert.strictEqual(fs.readFileSync(launched[1].filePath, 'utf8'), 'int main() { return 0; }');
+
+        const openedInNotepad = await request(port, {
+            method: 'POST',
+            url: '/open',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ide: 'notepad', language: 'text', code: 'translated output' })
+        });
+        assert.strictEqual(openedInNotepad.status, 200);
+        assert.strictEqual(launched.length, 3);
+        assert.strictEqual(launched[2].ide, 'notepad');
+        assert.strictEqual(path.extname(launched[2].filePath), '.txt');
+        assert.strictEqual(fs.readFileSync(launched[2].filePath, 'utf8'), 'translated output');
 
         console.log('IDE companion tests passed.');
     } finally {

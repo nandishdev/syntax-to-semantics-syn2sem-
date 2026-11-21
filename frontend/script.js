@@ -1605,87 +1605,78 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
             };
 
-            // Post to local server via hidden iframe (bypasses HTTPS PNA restrictions)
-            const postToLocalDesktop = (app, ext, code) => {
-                let iframe = document.getElementById('stos_launch_iframe');
-                if (!iframe) {
-                    iframe = document.createElement('iframe');
-                    iframe.id = 'stos_launch_iframe';
-                    iframe.name = 'stos_launch_iframe';
-                    iframe.style.display = 'none';
-                    document.body.appendChild(iframe);
-                }
-                let form = document.getElementById('stos_launch_form');
-                if (!form) {
-                    form = document.createElement('form');
-                    form.id = 'stos_launch_form';
-                    form.method = 'POST';
-                    form.target = 'stos_launch_iframe';
-                    form.style.display = 'none';
-                    document.body.appendChild(form);
-                }
-                form.innerHTML = '';
-                const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-                form.action = isLocal ? '/quick-launch' : 'http://localhost:3000/quick-launch';
-
-                const appInput = document.createElement('input');
-                appInput.type = 'hidden';
-                appInput.name = 'app';
-                appInput.value = app;
-                form.appendChild(appInput);
-
-                const extInput = document.createElement('input');
-                extInput.type = 'hidden';
-                extInput.name = 'ext';
-                extInput.value = ext;
-                form.appendChild(extInput);
-
-                const codeInput = document.createElement('input');
-                codeInput.type = 'hidden';
-                codeInput.name = 'code';
-                codeInput.value = code;
-                form.appendChild(codeInput);
-
-                form.submit();
+            const langToExt = {
+                python: '.py',
+                java: '.java',
+                c: '.c',
+                cpp: '.cpp',
+                javascript: '.js'
             };
 
-            // Open Output in Notepad (via server or direct local launch)
-            const btnDownload = document.getElementById('btn-download');
-            if (btnDownload) {
-                btnDownload.addEventListener('click', async () => {
-                    const { code } = getCodeToExport('.txt');
-                    showToast("Opening Notepad...", 'info', 2000);
+            const openInDesktopApp = async (app, label) => {
+                const { code, ext } = getCodeToExport(app === 'notepad' ? '.txt' : undefined);
+                const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
-                    // 1. Submit form POST to hidden iframe
-                    postToLocalDesktop('notepad', '.txt', code);
-
-                    // 2. Direct fetch if local
-                    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                showToast(`Opening in ${label}...`, 'info', 2500);
+                try {
+                    let response;
                     if (isLocal) {
-                        fetch('/open-notepad', {
+                        const route = app === 'notepad'
+                            ? '/open-notepad'
+                            : `/${app === 'vscode' ? 'open-vscode' : 'open-antigravity'}?ext=${encodeURIComponent(ext)}`;
+                        response = await fetch(route, {
                             method: 'POST',
                             headers: { 'Content-Type': 'text/plain' },
                             body: code
-                        }).then(r => r.json()).then(data => {
-                            if (data && data.success) showToast("Opened directly in Notepad!", 'success');
-                        }).catch(() => {});
+                        });
                     } else {
-                        // Fallback download if user has no local server
-                        setTimeout(() => {
-                            try {
-                                const blob = new Blob([code], { type: 'text/plain;charset=utf-8' });
-                                const dlUrl = URL.createObjectURL(blob);
-                                const a = document.createElement('a');
-                                a.href = dlUrl;
-                                a.download = 'translated_code.txt';
-                                document.body.appendChild(a);
-                                a.click();
-                                document.body.removeChild(a);
-                                URL.revokeObjectURL(dlUrl);
-                            } catch (_) {}
-                        }, 2500);
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 10000);
+                        try {
+                            response = await fetch('http://127.0.0.1:43127/open', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                signal: controller.signal,
+                                body: JSON.stringify({
+                                    ide: app,
+                                    language: app === 'notepad' ? 'text' : targetLang.value,
+                                    code
+                                })
+                            });
+                        } catch (error) {
+                            const link = document.createElement('a');
+                            link.href = '/install-ide-helper.cmd';
+                            link.download = 'Syn2Sem-IDE-Helper-Setup.cmd';
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            showToast(
+                                error.name === 'AbortError'
+                                    ? 'The desktop connector did not respond. Run the downloaded setup, then click the logo again.'
+                                    : 'The desktop connector is not available. Run the downloaded setup, then click the logo again.',
+                                'warning',
+                                7000
+                            );
+                            return;
+                        } finally {
+                            clearTimeout(timeoutId);
+                        }
                     }
-                });
+
+                    const data = await response.json();
+                    if (!response.ok || !data.success) {
+                        throw new Error(data.message || `Could not open ${label}.`);
+                    }
+                    showToast(`Opened in ${label}!`, 'default');
+                } catch (error) {
+                    showToast(error.message || `Could not open ${label}.`, 'warning', 5000);
+                }
+            };
+
+            // Open output in the selected desktop app.
+            const btnDownload = document.getElementById('btn-download');
+            if (btnDownload) {
+                btnDownload.addEventListener('click', () => openInDesktopApp('notepad', 'Notepad'));
             }
 
             // Generate PDF Report
@@ -1849,68 +1840,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
-            const langToExt = {
-                python: '.py',
-                java: '.java',
-                c: '.c',
-                cpp: '.cpp',
-                javascript: '.js'
-            };
-
             const openInIde = async (ide, label) => {
-                const { code, ext } = getCodeToExport();
-                const routeName = ide === 'vscode' ? 'open-vscode' : 'open-antigravity';
-                const protocol = ide === 'vscode' ? 'vscode://' : 'antigravity://';
-
-                // 1. Copy code to clipboard as instant backup
+                const { code } = getCodeToExport();
                 try {
                     if (navigator.clipboard && navigator.clipboard.writeText) {
                         navigator.clipboard.writeText(code).catch(() => {});
                     }
                 } catch (_) {}
-
-                showToast(`Opening in ${label}...`, 'info', 2500);
-
-                // 2. Submit form POST to hidden iframe (bypasses HTTPS PNA restrictions)
-                postToLocalDesktop(ide, ext, code);
-
-                // 3. Direct fetch if local
-                const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-                if (isLocal) {
-                    fetch(`/${routeName}?ext=${ext}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'text/plain' },
-                        body: code
-                    }).then(r => r.json()).then(data => {
-                        if (data && data.success) showToast(`Opened directly in ${label}!`, 'success');
-                    }).catch(() => {});
-                } else {
-                    // Fallback for remote web deployment without local server
-                    setTimeout(() => {
-                        try {
-                            const link = document.createElement('a');
-                            link.href = protocol;
-                            link.rel = 'noopener';
-                            document.body.appendChild(link);
-                            link.click();
-                            document.body.removeChild(link);
-                        } catch (_) {}
-                    }, 1200);
-
-                    setTimeout(() => {
-                        try {
-                            const blob = new Blob([code], { type: 'text/plain' });
-                            const url = URL.createObjectURL(blob);
-                            const dl = document.createElement('a');
-                            dl.href = url;
-                            dl.download = `translated_code${ext}`;
-                            document.body.appendChild(dl);
-                            dl.click();
-                            document.body.removeChild(dl);
-                            URL.revokeObjectURL(url);
-                        } catch (_) {}
-                    }, 2500);
-                }
+                await openInDesktopApp(ide, label);
             };
 
             const btnVscode = document.getElementById('btn-vscode');
